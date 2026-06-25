@@ -1,8 +1,12 @@
 *
 !src/
+!src/**
 !test/
+!test/**
 !lib/
+!lib/**
 !include/
+!include/**
 !CMakeLists.txt
 !LICENSE
 !.gitattributes
