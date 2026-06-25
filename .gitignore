@@ -1,0 +1,9 @@
+*
+!src/
+!test/
+!lib/
+!include/
+!CMakeLists.txt
+!LICENSE
+!.gitattributes
+!.gitignore
