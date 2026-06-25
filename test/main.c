@@ -3,6 +3,10 @@
 
 int main()
 {
-    printf("test...\n");
+	GECS_RegisterComponent("Transform", 16);
+
+	GECS_CleanUp();
+
+	printf("All done.\n");
     return 0;
 }
