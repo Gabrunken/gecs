@@ -2,6 +2,7 @@
 #define SPARSE_SET_H_
 
 #include <stdint.h>
+#include <stddef.h>
 
 struct SparseSet
 {
@@ -20,6 +21,7 @@ void SparseSetRemoveElement(struct SparseSet* set, size_t id);
 void* SparseSetGetElement(struct SparseSet* set, size_t id);
 void SparseSetCreate(struct SparseSet* set, size_t initialElementCount, size_t elementSize);
 void SparseSetFree(struct SparseSet* set);
+int SparseSetHasElement(struct SparseSet* set, size_t id);
 
 #ifdef SPARSE_SET_IMPL
 
@@ -46,6 +48,7 @@ void SparseSetCreate(struct SparseSet* set, size_t initialElementCount, size_t e
 
     set->valueSize = elementSize;
     set->dataLen = 0;
+    if (initialElementCount == 0) initialElementCount++;
 
     set->data = malloc(initialElementCount * elementSize);
     EXPECT(set->data, "malloc failed");
@@ -71,9 +74,24 @@ void SparseSetFree(struct SparseSet* set)
     free(set->physicalToLogical); set->physicalToLogical = NULL;
 }
 
+int SparseSetHasElement(struct SparseSet* set, size_t id)
+{
+    EXPECT(set, "SparseSetHasElement: set is NULL");
+
+    if (set->dataLen == 0) return 0;
+    if (id >= set->logicalToPhysicalArrLen / sizeof(size_t)) return 0;
+
+    size_t physicalID = set->logicalToPhysical[id];
+    if (physicalID >= set->dataLen) return 0;
+
+    return set->physicalToLogical[physicalID] == id;
+}
+
 void SparseSetAddElement(struct SparseSet* set, size_t id, void* val)
 {
     EXPECT(set, "SparseSetAddElement: set is NULL");
+
+    if (SparseSetHasElement(set, id)) return;
 
     if (set->dataLen >= set->dataArrLen / set->valueSize)
     {
@@ -101,12 +119,13 @@ void SparseSetAddElement(struct SparseSet* set, size_t id, void* val)
     set->physicalToLogical[set->dataLen] = id;
 
     set->dataLen++;
-    return;
 }
 
 void SparseSetRemoveElement(struct SparseSet* set, size_t id)
 {
     EXPECT(set, "SparseSetRemoveElement: set is NULL");
+
+    if (!SparseSetHasElement(set, id)) return;
 
     if (id >= set->logicalToPhysicalArrLen)
     {

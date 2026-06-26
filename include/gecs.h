@@ -14,11 +14,17 @@ is composed of.
 
 typedef size_t ID;
 
+void GECS_Init();
+
 void GECS_RegisterComponent(const char* name, size_t size);
-ID GECS_CreateEntity();
+//Returns GECS_INVALID_ID (aka 0) on failure
+ID GECS_CreateEntity(const char* name);
 void GECS_DeleteEntity(ID entity);
-void GECS_CreateComponent(ID entity, const char* componentName);
-void GECS_DeleteComponent(ID entity, const char* componentName);
+void GECS_CreateComponent(ID entity, const char* componentTypeName, void* componentData);
+void GECS_DeleteComponent(ID entity, const char* componentTypeName);
+
+struct SparseSet* GECS_GetComponentSparseSet(const char* name);
+bool GECS_DoesEntityHaveComponent(ID entity, const char* componentTypeName);
 
 void GECS_CleanUp();
 
