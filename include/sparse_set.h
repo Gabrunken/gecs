@@ -143,7 +143,7 @@ void SparseSetRemoveElement(struct SparseSet* set, size_t id)
 
     if (set->dataLen == 0)
     {
-        printf("SparseSetRemoveElement Error: the set has not elements\n");
+        printf("SparseSetRemoveElement Error: the set has no elements\n");
         return;
     }
 
@@ -158,7 +158,7 @@ void SparseSetRemoveElement(struct SparseSet* set, size_t id)
 
 void* SparseSetGetElement(struct SparseSet* set, size_t id)
 {
-    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    EXPECT(set, "SparseSetGetElement: set is NULL");
 
     if (id >= set->logicalToPhysicalArrLen / sizeof(size_t))
     {
@@ -168,13 +168,13 @@ void* SparseSetGetElement(struct SparseSet* set, size_t id)
 
     if (set->dataLen == 0)
     {
-        printf("SparseSetRemoveElement Error: the set has no elements\n");
+        printf("SparseSetGetElement Error: the set has no elements\n");
         return NULL;
     }
 
     if (set->logicalToPhysical[id] >= set->dataLen)
     {
-        printf("SparseSetRemoveElement Error: the id is not valid\n");
+        printf("SparseSetGetElement Error: the id is not valid\n");
         return NULL;
     }
 
@@ -185,20 +185,20 @@ void* SparseSetGetElement(struct SparseSet* set, size_t id)
 
 size_t SparseSetGetElementCount(struct SparseSet* set)
 {
-    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    EXPECT(set, "SparseSetGetElementCount: set is NULL");
     return set->dataLen;
 }
 
 size_t SparseSetGetElementSize(struct SparseSet* set)
 {
-    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    EXPECT(set, "SparseSetGetElementSize: set is NULL");
     size_t SparseSetGetElementSize(struct SparseSet* set);
     return set->valueSize;
 }
 
 size_t SparseSetGetPhysicalIndexFromID(struct SparseSet* set, size_t id)
 {
-    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    EXPECT(set, "SparseSetGetPhysicalIndexFromID: set is NULL");
 
     if (id >= set->logicalToPhysicalArrLen / sizeof(size_t))
     {
@@ -211,7 +211,7 @@ size_t SparseSetGetPhysicalIndexFromID(struct SparseSet* set, size_t id)
 
 size_t SparseSetGetIDFromPhysicalIndex(struct SparseSet* set, size_t physicalIdx)
 {
-    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    EXPECT(set, "SparseSetGetIDFromPhysicalIndex: set is NULL");
     if (physicalIdx >= set->dataLen)
     {
         printf("SparseSetGetIDFromPhysicalIndex: physicalIdx is out of bounds\n");
@@ -223,7 +223,7 @@ size_t SparseSetGetIDFromPhysicalIndex(struct SparseSet* set, size_t physicalIdx
 
 void* SparseSetGetDataBuffer(struct SparseSet* set)
 {
-    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    EXPECT(set, "SparseSetGetDataBuffer: set is NULL");
     return set->data;
 }
 
