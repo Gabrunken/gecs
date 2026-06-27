@@ -28,7 +28,7 @@ size_t SparseSetGetElementCount(struct SparseSet* set);
 size_t SparseSetGetElementSize(struct SparseSet* set);
 size_t SparseSetGetPhysicalIndexFromID(struct SparseSet* set, size_t id);
 size_t SparseSetGetIDFromPhysicalIndex(struct SparseSet* set, size_t physicalIdx);
-size_t* SparseSetGetDataBuffer(struct SparseSet* set);
+void* SparseSetGetDataBuffer(struct SparseSet* set);
 
 #ifdef SPARSE_SET_IMPL
 
@@ -218,7 +218,7 @@ size_t SparseSetGetIDFromPhysicalIndex(struct SparseSet* set, size_t physicalIdx
     return set->physicalToLogical[physicalIdx];
 }
 
-size_t* SparseSetGetDataBuffer(struct SparseSet* set)
+void* SparseSetGetDataBuffer(struct SparseSet* set)
 {
     EXPECT(set, "SparseSetGetElementValue: set is NULL");
     return set->data;
