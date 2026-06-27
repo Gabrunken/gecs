@@ -26,6 +26,9 @@ int SparseSetHasElement(struct SparseSet* set, size_t id);
 size_t SparseSetGetElementCount(struct SparseSet* set);
 //Get the singular element size in bytes
 size_t SparseSetGetElementSize(struct SparseSet* set);
+size_t SparseSetGetPhysicalIndexFromID(struct SparseSet* set, size_t id);
+size_t SparseSetGetIDFromPhysicalIndex(struct SparseSet* set, size_t physicalIdx);
+size_t* SparseSetGetDataBuffer(struct SparseSet* set);
 
 #ifdef SPARSE_SET_IMPL
 
@@ -131,7 +134,7 @@ void SparseSetRemoveElement(struct SparseSet* set, size_t id)
 
     if (!SparseSetHasElement(set, id)) return;
 
-    if (id >= set->logicalToPhysicalArrLen)
+    if (id >= set->logicalToPhysicalArrLen / sizeof(size_t))
     {
         printf("SparseSetRemoveElement Error: id is greater than array length\n");
         return;
@@ -156,7 +159,7 @@ void* SparseSetGetElement(struct SparseSet* set, size_t id)
 {
     EXPECT(set, "SparseSetGetElementValue: set is NULL");
 
-    if (id >= set->logicalToPhysicalArrLen)
+    if (id >= set->logicalToPhysicalArrLen / sizeof(size_t))
     {
         printf("SparseSetGetElement Error: id is greater than array length\n");
         return NULL;
@@ -185,8 +188,40 @@ size_t SparseSetGetElementCount(struct SparseSet* set)
 
 size_t SparseSetGetElementSize(struct SparseSet* set)
 {
+    EXPECT(set, "SparseSetGetElementValue: set is NULL");
     size_t SparseSetGetElementSize(struct SparseSet* set);
     return set->valueSize;
+}
+
+size_t SparseSetGetPhysicalIndexFromID(struct SparseSet* set, size_t id)
+{
+    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+
+    if (id >= set->logicalToPhysicalArrLen / sizeof(size_t))
+    {
+        printf("SparseSetGetPhysicalIndexFromID: id is out of bounds\n");
+        return 0;
+    }
+
+    return set->logicalToPhysical[id];
+}
+
+size_t SparseSetGetIDFromPhysicalIndex(struct SparseSet* set, size_t physicalIdx)
+{
+    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    if (physicalIdx >= set->dataLen)
+    {
+        printf("SparseSetGetIDFromPhysicalIndex: physicalIdx is out of bounds\n");
+        return 0;
+    }
+
+    return set->physicalToLogical[physicalIdx];
+}
+
+size_t* SparseSetGetDataBuffer(struct SparseSet* set)
+{
+    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    return set->data;
 }
 
 #endif //SPARSE_SET_IMPL
