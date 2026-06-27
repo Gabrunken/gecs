@@ -18,6 +18,7 @@ struct SparseSet
 //Data must be an element of size "valueSize"
 void SparseSetAddElement(struct SparseSet* set, size_t id, void* data);
 void SparseSetRemoveElement(struct SparseSet* set, size_t id);
+//Returns NULL if the element is not present in the set
 void* SparseSetGetElement(struct SparseSet* set, size_t id);
 void SparseSetCreate(struct SparseSet* set, size_t initialElementCount, size_t elementSize);
 void SparseSetFree(struct SparseSet* set);
@@ -167,7 +168,7 @@ void* SparseSetGetElement(struct SparseSet* set, size_t id)
 
     if (set->dataLen == 0)
     {
-        printf("SparseSetRemoveElement Error: the set has not elements\n");
+        printf("SparseSetRemoveElement Error: the set has no elements\n");
         return NULL;
     }
 
@@ -176,6 +177,8 @@ void* SparseSetGetElement(struct SparseSet* set, size_t id)
         printf("SparseSetRemoveElement Error: the id is not valid\n");
         return NULL;
     }
+
+    if (!SparseSetHasElement(set, id)) return NULL;
 
     return (char*)set->data + set->logicalToPhysical[id] * set->valueSize;
 }
