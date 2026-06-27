@@ -7,7 +7,6 @@
 
 #define GECS_ENTITY_NAME_MAX_LENGTH 24
 #define GECS_COMPONENT_NAME_MAX_LENGTH 24
-#define GECS_INVALID_ID 0
 #define GECS_MAX_ENTITIES 1'000'000
 
 static hashmap componentMap;

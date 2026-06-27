@@ -12,6 +12,8 @@ is composed of.
 
 #include <stddef.h>
 
+#define GECS_INVALID_ID 0
+
 typedef size_t ID;
 
 void GECS_Init();
