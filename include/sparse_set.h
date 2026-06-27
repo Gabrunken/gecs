@@ -22,6 +22,10 @@ void* SparseSetGetElement(struct SparseSet* set, size_t id);
 void SparseSetCreate(struct SparseSet* set, size_t initialElementCount, size_t elementSize);
 void SparseSetFree(struct SparseSet* set);
 int SparseSetHasElement(struct SparseSet* set, size_t id);
+//Get the number of stored elements in the set
+size_t SparseSetGetElementCount(struct SparseSet* set);
+//Get the singular element size in bytes
+size_t SparseSetGetElementSize(struct SparseSet* set);
 
 #ifdef SPARSE_SET_IMPL
 
@@ -171,6 +175,18 @@ void* SparseSetGetElement(struct SparseSet* set, size_t id)
     }
 
     return (char*)set->data + set->logicalToPhysical[id] * set->valueSize;
+}
+
+size_t SparseSetGetElementCount(struct SparseSet* set)
+{
+    EXPECT(set, "SparseSetGetElementValue: set is NULL");
+    return set->dataLen;
+}
+
+size_t SparseSetGetElementSize(struct SparseSet* set)
+{
+    size_t SparseSetGetElementSize(struct SparseSet* set);
+    return set->valueSize;
 }
 
 #endif //SPARSE_SET_IMPL
