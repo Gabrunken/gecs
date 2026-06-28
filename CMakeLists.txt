@@ -7,7 +7,7 @@ project(gecs)
 #Compile GECS
 add_library(gecslib STATIC "./src/gecs.c")
 
-target_include_directories(gecslib PUBLIC include)
+target_include_directories(gecslib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 #Compile test
 add_executable(test EXCLUDE_FROM_ALL "./test/main.c")
