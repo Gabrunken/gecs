@@ -16,7 +16,11 @@ is composed of.
 #define GECS_ENTITY_NAME_MAX_LENGTH 24
 #define GECS_COMPONENT_NAME_MAX_LENGTH 24
 
-typedef size_t ID;
+typedef struct
+{
+    size_t id;
+    size_t gen;
+} ID;
 
 void GECS_Init();
 
