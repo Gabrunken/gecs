@@ -5,9 +5,7 @@
 #define HASHMAP_IMPL
 #include <hashmap.h>
 
-#define GECS_ENTITY_NAME_MAX_LENGTH 24
-#define GECS_COMPONENT_NAME_MAX_LENGTH 24
-#define GECS_MAX_ENTITIES 1'000'000
+#define GECS_INITIAL_MAX_ENTITIES 10'000
 
 static hashmap componentMap;
 static size_t componentNum;
@@ -15,6 +13,7 @@ static char** componentNames;
 
 static ID nextID = 1;
 
+static size_t maxEntities = GECS_INITIAL_MAX_ENTITIES;
 static struct SparseSet entities;
 
 static bool initialized;
@@ -39,18 +38,19 @@ struct SparseSet* GECS_GetComponentSparseSet(const char* name)
 	return set;
 }
 
-bool GECS_DoesEntityHaveComponent(ID entity, const char* componentTypeName)
+void* GECS_GetComponent(ID entity, const char* componentTypeName)
 {
 	GECS_EXPECT(initialized && entity && componentTypeName);
 
 	struct SparseSet* set = GECS_GetComponentSparseSet(componentTypeName);
 	if (!set)
 	{
-		printf("_GECS_DoesEntityHaveComponent ERROR: component type of name '%s' does not exist.\n", componentTypeName);
-		return false;
+		printf("GECS_GetComponent ERROR: component type of name '%s' does not exist.\n", componentTypeName);
+		return NULL;
 	}
 
-	return SparseSetHasElement(set, entity);
+	//Returns NULL if the element is not present in the set (it is not an error, it is expected)
+	return SparseSetGetElement(set, entity);
 }
 
 void GECS_Init()
@@ -97,9 +97,9 @@ static ID _GECS_GetNewID()
 {
 	GECS_EXPECT(initialized);
 
-	if (nextID > GECS_MAX_ENTITIES)
+	if (nextID > maxEntities)
 	{
-		printf("_GECS_GetNewID ERROR: Max entities reached (max: %d).\n", GECS_MAX_ENTITIES);
+		printf("_GECS_GetNewID ERROR: Max entities reached (max: %zu).\n", maxEntities);
 		return GECS_INVALID_ID;
 	}
 
@@ -250,6 +250,16 @@ void GECS_DeleteComponent(ID entity, const char *componentTypeName)
 	SparseSetRemoveElement(componentDataSet, entity);
 }
 
+size_t GECS_GetMaxEntities()
+{
+	return maxEntities;
+}
+
+void GECS_SetMaxEntities(size_t max)
+{
+	maxEntities = max;
+}
+
 void GECS_CleanUp()
 {
 	GECS_EXPECT(initialized);
@@ -270,6 +280,7 @@ void GECS_CleanUp()
 	componentNames = NULL;
 	componentNum = 0;
 	nextID = 0;
+	maxEntities = GECS_INITIAL_MAX_ENTITIES;
 
 	hashmap_delete(componentMap);
 	SparseSetFree(&entities);

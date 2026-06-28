@@ -13,20 +13,34 @@ is composed of.
 #include <stddef.h>
 
 #define GECS_INVALID_ID 0
+#define GECS_ENTITY_NAME_MAX_LENGTH 24
+#define GECS_COMPONENT_NAME_MAX_LENGTH 24
 
 typedef size_t ID;
 
 void GECS_Init();
 
 void GECS_RegisterComponent(const char* name, size_t size);
+
 //Returns GECS_INVALID_ID (aka 0) on failure
 ID GECS_CreateEntity(const char* name);
+
+//Deletes an entity and its associated components.
 void GECS_DeleteEntity(ID entity);
 void GECS_CreateComponent(ID entity, const char* componentTypeName, void* componentData);
 void GECS_DeleteComponent(ID entity, const char* componentTypeName);
 
+//Returns NULL if the entity doesn't have the component, useful to check existence.
+void* GECS_GetComponent(ID entity, const char* componentTypeName);
+
+size_t GECS_GetMaxEntities();
+
+//If the value is lower than the current stored entites count,
+//they will stay and will not be deleted. Further creation of
+//entities will be discarded until the new threshold won't be reached.
+void GECS_SetMaxEntities(size_t max);
+
 struct SparseSet* GECS_GetComponentSparseSet(const char* name);
-bool GECS_DoesEntityHaveComponent(ID entity, const char* componentTypeName);
 
 void GECS_CleanUp();
 
