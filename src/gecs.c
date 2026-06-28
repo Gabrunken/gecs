@@ -1,9 +1,9 @@
 #include <gecs.h>
 #include <stdlib.h>
 #define SPARSE_SET_IMPL
-#include <sparse_set.h>
+#include <data_structures/sparse_set.h>
 #define HASHMAP_IMPL
-#include <hashmap.h>
+#include <data_structures/hashmap.h>
 
 #define GECS_INITIAL_ENTITY_ALLOC_SIZE 10'000
 

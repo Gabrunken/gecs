@@ -1,4 +1,5 @@
-#pragma once
+#ifndef HASHMAP_H_
+#define HASHMAP_H_
 #include <stdint.h>
 
 #define HASHMAP_ARR_CAPACITY 128
@@ -167,3 +168,5 @@ void hashmap_delete(hashmap map)
 }
 
 #endif
+
+#endif //Include guard
