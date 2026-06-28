@@ -41,6 +41,7 @@ do\
     {\
         printf("\033[31m" "ASSERTION FAILED at %s -- line %d\n", __FILE__, __LINE__);\
         __VA_OPT__(printf("Message: " "\033[39m", __VA_ARGS__);)\
+        exit(1);\
     }\
 } while (0)
 
