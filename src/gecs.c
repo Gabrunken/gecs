@@ -264,38 +264,38 @@ void GECS_AttachComponent(ID entity, ComponentTypeID componentTypeID, void* comp
 
 	if (entity.id == GECS_INVALID_ID || entity.gen == GECS_INVALID_GEN)
 	{
-		printf("GECS_CreateComponent ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
+		printf("GECS_AttachComponent ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
 		return;
 	}
 
 	if (componentTypeID == GECS_INVALID_COMPONENT_TYPE_ID)
 	{
-		printf("GECS_CreateComponent ERROR: componentTypeID is invalid.\n");
+		printf("GECS_AttachComponent ERROR: componentTypeID is invalid.\n");
 		return;
 	}
 
 	if (!componentData)
 	{
-		printf("GECS_CreateComponent ERROR: componentData is NULL.\n");
+		printf("GECS_AttachComponent ERROR: componentData is NULL.\n");
 		return;
 	}
 
 	//Check if entity exists
 	if (!SparseSetHasElement(&entities, entity.id))
 	{
-		printf("GECS_CreateComponent ERROR: entity %zu does not exist.\n", entity.id);
+		printf("GECS_AttachComponent ERROR: entity %zu does not exist.\n", entity.id);
 		return;
 	}
 
 	if (currentIDsGeneration[entity.id - 1] != entity.gen)
 	{
-		printf("GECS_CreateComponent ERROR: entity %zu of generation %zu is not valid anymore.\n", entity.id, entity.gen);
+		printf("GECS_AttachComponent ERROR: entity %zu of generation %zu is not valid anymore.\n", entity.id, entity.gen);
 		return;
 	}
 
 	if (componentTypeID > registeredComponents.elementCount)
 	{
-		printf("GECS_CreateComponent ERROR: there is no registered component with type ID %zu.\n", componentTypeID);
+		printf("GECS_AttachComponent ERROR: there is no registered component with type ID %zu.\n", componentTypeID);
 		return;
 	}
 
@@ -304,7 +304,7 @@ void GECS_AttachComponent(ID entity, ComponentTypeID componentTypeID, void* comp
 	//Check if the entity already has that component type
 	if (SparseSetHasElement(componentSet, entity.id))
 	{
-		printf("GECS_CreateComponent ERROR: entity %zu already has component type of ID %zu.\n", entity.id, componentTypeID);
+		printf("GECS_AttachComponent ERROR: entity %zu already has component type of ID %zu.\n", entity.id, componentTypeID);
 		return;
 	}
 
@@ -317,33 +317,33 @@ void GECS_DetachComponent(ID entity, ComponentTypeID componentTypeID)
 
 	if (entity.id == GECS_INVALID_ID || entity.gen == GECS_INVALID_GEN)
 	{
-		printf("GECS_DeleteComponent ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
+		printf("GECS_DetachComponent ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
 		return;
 	}
 
 	if (componentTypeID == GECS_INVALID_COMPONENT_TYPE_ID)
 	{
-		printf("GECS_DeleteComponent ERROR: componentTypeID is invalid.\n");
+		printf("GECS_DetachComponent ERROR: componentTypeID is invalid.\n");
 		return;
 	}
 
 	if (componentTypeID > registeredComponents.elementCount)
 	{
-		printf("GECS_DeleteComponent ERROR: there is no registered component with type ID %zu.\n", componentTypeID);
+		printf("GECS_DetachComponent ERROR: there is no registered component with type ID %zu.\n", componentTypeID);
 		return;
 	}
 
 	//Check if entity exists
 	if (!SparseSetHasElement(&entities, entity.id))
 	{
-		printf("GECS_DeleteComponent ERROR: entity %zu does not exist.\n", entity.id);
+		printf("GECS_DetachComponent ERROR: entity %zu does not exist.\n", entity.id);
 		return;
 	}
 
 	//Check entity generation
 	if (currentIDsGeneration[entity.id - 1] != entity.gen)
 	{
-		printf("GECS_DeleteComponent ERROR: entity %zu of generation %zu is not valid anymore.\n", entity.id, entity.gen);
+		printf("GECS_DetachComponent ERROR: entity %zu of generation %zu is not valid anymore.\n", entity.id, entity.gen);
 		return;
 	}
 
@@ -352,7 +352,7 @@ void GECS_DetachComponent(ID entity, ComponentTypeID componentTypeID)
 	//Check if the entity has that component
 	if (!SparseSetHasElement(componentSet, entity.id))
 	{
-		printf("GECS_DeleteComponent ERROR: entity %zu does not have component type ID %zu.\n", entity.id, componentTypeID);
+		printf("GECS_DetachComponent ERROR: entity %zu does not have component type ID %zu.\n", entity.id, componentTypeID);
 		return;
 	}
 
