@@ -71,7 +71,6 @@ void hashmap_set_val(hashmap map, const char* key, uint64_t val)
 
         //found node, update value
         node->val = val;
-
         return;
     }
 

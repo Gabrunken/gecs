@@ -37,13 +37,6 @@ void GECS_DeleteComponent(ID entity, const char* componentTypeName);
 //Returns NULL if the entity doesn't have the component, useful to check existence.
 void* GECS_GetComponent(ID entity, const char* componentTypeName);
 
-size_t GECS_GetMaxEntities();
-
-//If the value is lower than the current stored entites count,
-//they will stay and will not be deleted. Further creation of
-//entities will be discarded until the new threshold won't be reached.
-void GECS_SetMaxEntities(size_t max);
-
 struct SparseSet* GECS_GetComponentSparseSet(const char* name);
 
 void GECS_CleanUp();
