@@ -94,6 +94,7 @@ bool DYArrayAddElement(dyarray* arr, void* element)
     }
 
     memcpy(((char*)arr->buf) + arr->elementCount * arr->elementSize, element, arr->elementSize);
+    arr->elementCount++;
     return true;
 }
 
