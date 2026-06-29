@@ -25,34 +25,39 @@ typedef struct
 
 typedef size_t ComponentTypeID;
 
+//@brief Initializes GECS, which is mandatory to use the library.
 void GECS_Init();
 
-//Register a component type in the system.
-//To attach any component to an entity, it must before registered through this function.
-//"size" is the size in bytes of the singular component.
+//@brief Register a component type in the system.
+//To attach any component to an entity, it must be registered through this function.
+//@param size The size in bytes of the singular component.
+//@return The unique id assigned to the newly registered component type.
 ComponentTypeID GECS_RegisterComponent(size_t size);
 
-//Creates an entity in the system.
-//Returns GECS_INVALID_ID on failure.
-//More than 1 entity can have the same name.
+//@brief Creates an entity in the system.
+//More than 1 entity can have the same name at the same time.
+//@param name The name of the entity.
+//@return The newly created entity on success. GECS_INVALID_ID on failure.
 ID GECS_CreateEntity(const char* name);
 
-//Deletes an existing entity and its associated components.
+//@brief Deletes an existing entity and its associated components.
+//@param entity The target's entity ID.
 void GECS_DeleteEntity(ID entity);
 
-//Attach a registered component to an existing entity.
+//@brief Attach a registered component to an existing entity.
 //You cannot attach the same component type to the same entity more than once.
-//"componentData" must be an allcated buffer of the component type's size.
+//@param componentData An allcated buffer long as the component type's size.
 void GECS_AttachComponent(ID entity, ComponentTypeID componentTypeID, void* componentData);
-//Detach a registered component from an existing entity.
+//@brief Detach a registered component from an existing entity.
 void GECS_DetachComponent(ID entity, ComponentTypeID componentTypeID);
 
-//Retrieves the component object from a specified existing entity.
-//Returns NULL if the entity doesn't have the component, useful to check existence.
+//@brief Retrieves the component object from a specified existing entity.
+//@return The retrieved component data on success. NULL if the entity doesn't have the component, useful to check existence.
 void* GECS_GetComponent(ID entity, ComponentTypeID componentTypeID);
 
 struct SparseSet* GECS_GetComponentSparseSet(ComponentTypeID componentTypeID);
 
+//@brief Cleans up GECS, do it as soon as you're done with the library.
 void GECS_CleanUp();
 
 #endif
