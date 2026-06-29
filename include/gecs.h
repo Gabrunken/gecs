@@ -13,8 +13,9 @@ is composed of.
 #include <stddef.h>
 
 #define GECS_INVALID_ID 0
+#define GECS_INVALID_GEN 0
+#define GECS_INVALID_COMPONENT_TYPE_ID 0
 #define GECS_ENTITY_NAME_MAX_LENGTH 24
-#define GECS_COMPONENT_NAME_MAX_LENGTH 24
 
 typedef struct
 {
@@ -22,22 +23,35 @@ typedef struct
     size_t gen;
 } ID;
 
+typedef size_t ComponentTypeID;
+
 void GECS_Init();
 
-void GECS_RegisterComponent(const char* name, size_t size);
+//Register a component type in the system.
+//To attach any component to an entity, it must before registered through this function.
+//"size" is the size in bytes of the singular component.
+ComponentTypeID GECS_RegisterComponent(size_t size);
 
-//Returns GECS_INVALID_ID (aka 0) on failure
+//Creates an entity in the system.
+//Returns GECS_INVALID_ID on failure.
+//More than 1 entity can have the same name.
 ID GECS_CreateEntity(const char* name);
 
-//Deletes an entity and its associated components.
+//Deletes an existing entity and its associated components.
 void GECS_DeleteEntity(ID entity);
-void GECS_CreateComponent(ID entity, const char* componentTypeName, void* componentData);
-void GECS_DeleteComponent(ID entity, const char* componentTypeName);
 
+//Attach a registered component to an existing entity.
+//You cannot attach the same component type to the same entity more than once.
+//"componentData" must be an allcated buffer of the component type's size.
+void GECS_AttachComponent(ID entity, ComponentTypeID componentTypeID, void* componentData);
+//Detach a registered component from an existing entity.
+void GECS_DetachComponent(ID entity, ComponentTypeID componentTypeID);
+
+//Retrieves the component object from a specified existing entity.
 //Returns NULL if the entity doesn't have the component, useful to check existence.
-void* GECS_GetComponent(ID entity, const char* componentTypeName);
+void* GECS_GetComponent(ID entity, ComponentTypeID componentTypeID);
 
-struct SparseSet* GECS_GetComponentSparseSet(const char* name);
+struct SparseSet* GECS_GetComponentSparseSet(ComponentTypeID componentTypeID);
 
 void GECS_CleanUp();
 

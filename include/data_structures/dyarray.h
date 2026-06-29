@@ -1,6 +1,8 @@
 #ifndef DYARRAY_H_
 #define DYARRAY_H_
 
+#include <stddef.h>
+
 typedef struct
 {
     void* buf;

@@ -1,3 +1,5 @@
+#define DYARRAY_IMPL
+#include "data_structures/dyarray.h"
 #include <gecs.h>
 #include <stdlib.h>
 #define SPARSE_SET_IMPL
@@ -7,16 +9,20 @@
 
 #define GECS_INITIAL_ENTITY_ALLOC_SIZE 10'000
 
-static hashmap componentMap;
-static size_t componentNum;
-static char** componentNames;
+//static hashmap componentMap;
+//static size_t componentNum;
+//static char** componentNames;
 
+//Contains a SparseSet for each component type registered.
+//Any component cannot be removed once registered.
+static dyarray registeredComponents;
+static struct SparseSet entities;
+
+//Generational IDs
 static size_t* currentIDsGeneration;
 static size_t currentIDsGenerationLen;
 static size_t* currentIDsFreeList;
 static size_t freeIDCount;
-
-static struct SparseSet entities;
 
 static bool initialized;
 
@@ -31,31 +37,63 @@ do\
     }\
 } while (0)
 
-//Returns NULL if component type does not exist
-struct SparseSet* GECS_GetComponentSparseSet(const char* name)
+//
+struct SparseSet* GECS_GetComponentSparseSet(ComponentTypeID componentTypeID)
 {
-	GECS_EXPECT(initialized && name);
+	GECS_EXPECT(initialized);
 
-	struct SparseSet* set = NULL;
-	hashmap_get_val(componentMap, name, (void*)&set);
-	return set;
-}
-
-void* GECS_GetComponent(ID entity, const char* componentTypeName)
-{
-	GECS_EXPECT(initialized && entity.id && componentTypeName);
-
-	if (!SparseSetHasElement(&entities, entity.id)) return NULL;
-
-	//Check if the entity is not valid anymore
-	if (currentIDsGeneration[entity.id - 1] != entity.gen) return NULL;
-
-	struct SparseSet* set = GECS_GetComponentSparseSet(componentTypeName);
-	if (!set)
+	if (componentTypeID == GECS_INVALID_COMPONENT_TYPE_ID)
 	{
-		printf("GECS_GetComponent ERROR: component type of name '%s' does not exist.\n", componentTypeName);
+		printf("GECS_GetComponentSparseSet ERROR: componentTypeID is invalid.\n");
 		return NULL;
 	}
+
+	if (componentTypeID > registeredComponents.elementCount)
+	{
+		printf("GECS_GetComponentSparseSet ERROR: componeneTypeID is not a registered component.\n");
+		return NULL;
+	}
+
+	return DYArrayGetElement(&registeredComponents, componentTypeID - 1);
+}
+
+void* GECS_GetComponent(ID entity, ComponentTypeID componentTypeID)
+{
+	GECS_EXPECT(initialized);
+
+	if (entity.id == GECS_INVALID_ID || entity.gen == GECS_INVALID_GEN)
+	{
+		printf("GECS_GetComponent ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
+		return NULL;
+	}
+
+	if (componentTypeID == GECS_INVALID_COMPONENT_TYPE_ID)
+	{
+		printf("GECS_GetComponent ERROR: componentTypeID is invalid (%zu).\n", componentTypeID);
+		return NULL;
+	}
+
+	if (componentTypeID > registeredComponents.elementCount)
+	{
+		printf("GECS_GetComponent ERROR: componentTypeID is not a registered component (%zu).\n", componentTypeID);
+		return NULL;
+	}
+
+	if (!SparseSetHasElement(&entities, entity.id))
+	{
+		printf("GECS_GetComponent ERROR: entity %zu of generation %zu does not exist.\n", entity.id, entity.gen);
+		return NULL;
+	}
+
+	//Check if the entity is not valid anymore
+	if (currentIDsGeneration[entity.id - 1] != entity.gen)
+	{
+		printf("GECS_GetComponent ERROR: entity %zu of generation %zu does not exist anymore.\n", entity.id, entity.gen);
+		return NULL;
+	}
+
+	struct SparseSet* set = DYArrayGetElement(&registeredComponents, componentTypeID - 1);
+	EXPECT(set);
 
 	//Returns NULL if the element is not present in the set (it is not an error, it is expected)
 	return SparseSetGetElement(set, entity.id);
@@ -73,37 +111,27 @@ void GECS_Init()
 	currentIDsFreeList = calloc(currentIDsGenerationLen, sizeof(size_t));
 	EXPECT(currentIDsFreeList);
 
+	EXPECT(DYArrayCreate(&registeredComponents, sizeof(struct SparseSet), 10));
+
 	initialized = true;
 }
 
-void GECS_RegisterComponent(const char *name, size_t size)
+ComponentTypeID GECS_RegisterComponent(size_t size)
 {
 	GECS_EXPECT(initialized);
-	GECS_EXPECT(name && size);
 
-	if (GECS_GetComponentSparseSet(name))
+	if (!size)
 	{
-		printf("GECS_RegisterComponent ERROR: component type of name '%s' already exists.\n", name);
-		return;
+		printf("GECS_RegisterComponent ERROR: size is 0.\n");
+		return GECS_INVALID_COMPONENT_TYPE_ID;
 	}
 
-	size_t nameLen = strlen(name);
-	if (nameLen > GECS_COMPONENT_NAME_MAX_LENGTH)
-	{
-		printf("GECS_RegisterComponent ERROR: name '%s' is too long (max: %d).\n", name, GECS_COMPONENT_NAME_MAX_LENGTH);
-		return;
-	}
+	struct SparseSet set = {0};
+	SparseSetCreate(&set, 0, size);
+	DYArrayAddElement(&registeredComponents, &set);
 
-	struct SparseSet* set = malloc(sizeof(struct SparseSet));
-	GECS_EXPECT(set);
-
-	SparseSetCreate(set, 0, size);
-	hashmap_set_val(componentMap, name, (uint64_t)set);
-
-	componentNames = realloc(componentNames, sizeof(void*) * (++componentNum));
-	GECS_EXPECT(componentNames);
-	componentNames[componentNum - 1] = calloc(1, GECS_COMPONENT_NAME_MAX_LENGTH + 1);
-	strcpy(componentNames[componentNum - 1], name);
+	//The first ComponentTypeID starts from 1.
+	return registeredComponents.elementCount;
 }
 
 //Also takes responsibility to increase generations.
@@ -149,19 +177,24 @@ static ID _GECS_GetNewID()
 ID GECS_CreateEntity(const char *name)
 {
 	GECS_EXPECT(initialized);
-	GECS_EXPECT(name);
+
+	if (!name)
+	{
+		printf("GECS_CreateEntity ERROR: 'name' is NULL.\n");
+		return (ID){GECS_INVALID_ID, GECS_INVALID_GEN};
+	}
 
 	size_t nameLen = strlen(name);
 	if (nameLen == 0)
 	{
 		printf("GECS_CreateEntity ERROR: 'name' is empty.\n");
-		return (ID){GECS_INVALID_ID, 0};
+		return (ID){GECS_INVALID_ID, GECS_INVALID_GEN};
 	}
 
 	if (nameLen > GECS_ENTITY_NAME_MAX_LENGTH)
 	{
 		printf("GECS_CreateEntity ERROR: 'name' is too long, max is %d.\n", GECS_ENTITY_NAME_MAX_LENGTH);
-		return (ID){GECS_INVALID_ID, 0};
+		return (ID){GECS_INVALID_ID, GECS_INVALID_GEN};
 	}
 
 	ID id = _GECS_GetNewID(); //Automatically increases entityCount on success.
@@ -182,7 +215,12 @@ ID GECS_CreateEntity(const char *name)
 void GECS_DeleteEntity(ID entity)
 {
 	GECS_EXPECT(initialized);
-	GECS_EXPECT(entity.id);
+
+	if (entity.id == GECS_INVALID_ID || entity.gen == GECS_INVALID_GEN)
+	{
+		printf("GECS_DeleteEntity ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
+		return;
+	}
 
 	if (!SparseSetHasElement(&entities, entity.id))
 	{
@@ -206,11 +244,13 @@ void GECS_DeleteEntity(ID entity)
 
 	SparseSetRemoveElement(&entities, entity.id);
 
-	//Remove any components it had
-	for (size_t i = 0; i < componentNum; i++)
+	//Remove any components it had.
+	//Iterate for each element registered in the system and check if it contains this entity's ID.
+	for (size_t i = 0; i < registeredComponents.elementCount; i++)
 	{
-		struct SparseSet* set = GECS_GetComponentSparseSet(componentNames[i]);
+		struct SparseSet* set = DYArrayGetElement(&registeredComponents, i);
 		GECS_EXPECT(set);
+
 		if (SparseSetHasElement(set, entity.id))
 		{
 			SparseSetRemoveElement(set, entity.id);
@@ -218,21 +258,25 @@ void GECS_DeleteEntity(ID entity)
 	}
 }
 
-void GECS_CreateComponent(ID entity, const char* componentTypeName, void* componentData)
+void GECS_AttachComponent(ID entity, ComponentTypeID componentTypeID, void* componentData)
 {
 	GECS_EXPECT(initialized);
-	GECS_EXPECT(entity.id && componentTypeName);
 
-	size_t componentNameLen = strlen(componentTypeName);
-	if (componentNameLen > GECS_COMPONENT_NAME_MAX_LENGTH)
+	if (entity.id == GECS_INVALID_ID || entity.gen == GECS_INVALID_GEN)
 	{
-		printf("GECS_CreateComponent ERROR: the component type name is too long (max: %d).\n", GECS_COMPONENT_NAME_MAX_LENGTH);
+		printf("GECS_CreateComponent ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
 		return;
 	}
 
-	if (componentNameLen == 0)
+	if (componentTypeID == GECS_INVALID_COMPONENT_TYPE_ID)
 	{
-		printf("GECS_CreateComponent ERROR: the component type name is empty.\n");
+		printf("GECS_CreateComponent ERROR: componentTypeID is invalid.\n");
+		return;
+	}
+
+	if (!componentData)
+	{
+		printf("GECS_CreateComponent ERROR: componentData is NULL.\n");
 		return;
 	}
 
@@ -249,39 +293,43 @@ void GECS_CreateComponent(ID entity, const char* componentTypeName, void* compon
 		return;
 	}
 
-	//Check if component type exists
-	struct SparseSet* componentDataSet = GECS_GetComponentSparseSet(componentTypeName);
-	if (!componentDataSet)
+	if (componentTypeID > registeredComponents.elementCount)
 	{
-		printf("GECS_CreateComponent ERROR: component type of name '%s' does not exist.\n", componentTypeName);
+		printf("GECS_CreateComponent ERROR: there is no registered component with type ID %zu.\n", componentTypeID);
 		return;
 	}
+
+	struct SparseSet* componentSet = DYArrayGetElement(&registeredComponents, componentTypeID - 1);
 
 	//Check if the entity already has that component type
-	if (SparseSetHasElement(componentDataSet, entity.id))
+	if (SparseSetHasElement(componentSet, entity.id))
 	{
-		printf("GECS_CreateComponent ERROR: entity %zu already has component type '%s'.\n", entity.id, componentTypeName);
+		printf("GECS_CreateComponent ERROR: entity %zu already has component type of ID %zu.\n", entity.id, componentTypeID);
 		return;
 	}
 
-	SparseSetAddElement(componentDataSet, entity.id, componentData);
+	SparseSetAddElement(componentSet, entity.id, componentData);
 }
 
-void GECS_DeleteComponent(ID entity, const char *componentTypeName)
+void GECS_DetachComponent(ID entity, ComponentTypeID componentTypeID)
 {
 	GECS_EXPECT(initialized);
-	GECS_EXPECT(entity.id && componentTypeName);
 
-	size_t componentNameLen = strlen(componentTypeName);
-	if (componentNameLen > GECS_COMPONENT_NAME_MAX_LENGTH)
+	if (entity.id == GECS_INVALID_ID || entity.gen == GECS_INVALID_GEN)
 	{
-		printf("GECS_DeleteComponent ERROR: the component type name is too long (max: %d).\n", GECS_COMPONENT_NAME_MAX_LENGTH);
+		printf("GECS_DeleteComponent ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
 		return;
 	}
 
-	if (componentNameLen == 0)
+	if (componentTypeID == GECS_INVALID_COMPONENT_TYPE_ID)
 	{
-		printf("GECS_DeleteComponent ERROR: the component type name is empty.\n");
+		printf("GECS_DeleteComponent ERROR: componentTypeID is invalid.\n");
+		return;
+	}
+
+	if (componentTypeID > registeredComponents.elementCount)
+	{
+		printf("GECS_DeleteComponent ERROR: there is no registered component with type ID %zu.\n", componentTypeID);
 		return;
 	}
 
@@ -292,28 +340,23 @@ void GECS_DeleteComponent(ID entity, const char *componentTypeName)
 		return;
 	}
 
+	//Check entity generation
 	if (currentIDsGeneration[entity.id - 1] != entity.gen)
 	{
 		printf("GECS_DeleteComponent ERROR: entity %zu of generation %zu is not valid anymore.\n", entity.id, entity.gen);
 		return;
 	}
 
-	//Check if the component exists
-	struct SparseSet* componentDataSet = GECS_GetComponentSparseSet(componentTypeName);
-	if (!componentDataSet)
-	{
-		printf("GECS_DeleteComponent ERROR: the component type '%s' does not exist.\n", componentTypeName);
-		return;
-	}
+	struct SparseSet* componentSet = DYArrayGetElement(&registeredComponents, componentTypeID - 1);
 
 	//Check if the entity has that component
-	if (!SparseSetHasElement(componentDataSet, entity.id))
+	if (!SparseSetHasElement(componentSet, entity.id))
 	{
-		printf("GECS_DeleteComponent ERROR: entity %zu does not have component type '%s'.\n", entity.id, componentTypeName);
+		printf("GECS_DeleteComponent ERROR: entity %zu does not have component type ID %zu.\n", entity.id, componentTypeID);
 		return;
 	}
 
-	SparseSetRemoveElement(componentDataSet, entity.id);
+	SparseSetRemoveElement(componentSet, entity.id);
 }
 
 void GECS_CleanUp()
@@ -321,28 +364,21 @@ void GECS_CleanUp()
 	GECS_EXPECT(initialized);
 
 	//Free sparse sets
-	for (size_t i = 0; i < componentNum; i++)
+	for (size_t i = 0; i < registeredComponents.elementCount; i++)
 	{
-		struct SparseSet* set;
-		GECS_EXPECT(hashmap_get_val(componentMap, componentNames[i], (uint64_t*)&set));
+		struct SparseSet* set = DYArrayGetElement(&registeredComponents, i);
+		EXPECT(set);
 		SparseSetFree(set);
-		free(set);
-
-		free(componentNames[i]);
 	}
 
-	if (componentNames)
-		free(componentNames);
+	DYArrayFree(&registeredComponents);
+
 	free(currentIDsFreeList);
 	free(currentIDsGeneration);
 
 	currentIDsGenerationLen = 0;
 	freeIDCount = 0;
 
-	componentNames = NULL;
-	componentNum = 0;
-
-	hashmap_delete(componentMap);
 	SparseSetFree(&entities);
 
 	initialized = false;
