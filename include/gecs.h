@@ -11,10 +11,12 @@ is composed of.
 */
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define GECS_INVALID_ID 0
 #define GECS_INVALID_GEN 0
 #define GECS_INVALID_COMPONENT_TYPE_ID 0
+#define GECS_INVALID_SYSTEM_ID 0
 #define GECS_ENTITY_NAME_MAX_LENGTH 24
 
 typedef struct
@@ -24,9 +26,23 @@ typedef struct
 } ID;
 
 typedef size_t ComponentTypeID;
+typedef size_t SystemID;
 
 //@brief Initializes GECS, which is mandatory to use the library.
 void GECS_Init();
+
+//@brief Register a System Archetype in the system.
+//The order in which the ComponentTypeIDs are specified is crucial to the component data access in the callback function,
+//since it matches exactly with the indices.
+//@param callback The function called upon system execution, entity having that exact component set.
+//@param componentCount The count of components specified in the variadic part of the arguments.
+//The variadic field expects the ComponentTypeIDs of the System's Archetype, in order.
+//@return The SystemID used to identify the newly created System's Archetype in the system.
+SystemID GECS_RegisterSystem(void (*callback)(ID, void**), int componentCount, ...);
+
+//@brief Execute the callback defined by the system registration.
+//@param systemID The idendificator for the system to execute.
+void GECS_ExecuteSystem(SystemID systemID);
 
 //@brief Register a component type in the system.
 //To attach any component to an entity, it must be registered through this function.
@@ -60,9 +76,10 @@ void GECS_DetachComponent(ID entity, ComponentTypeID componentTypeID);
 //@return The retrieved component data on success. NULL if the entity doesn't have the component, useful to check existence.
 void* GECS_GetComponent(ID entity, ComponentTypeID componentTypeID);
 
+//@brief Retrieves a specified entity's name.
+//@param entity The target entity's ID.
+//@return The entity's null terminated name.
 const char* GECS_GetEntityName(ID entity);
-
-struct SparseSet* GECS_GetComponentSparseSet(ComponentTypeID componentTypeID);
 
 //@brief Cleans up GECS, do it as soon as you're done with the library.
 void GECS_CleanUp();
