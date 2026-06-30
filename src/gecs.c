@@ -258,6 +258,22 @@ void GECS_DeleteEntity(ID entity)
 	}
 }
 
+bool GECS_DoesEntityExist(ID entity)
+{
+	GECS_EXPECT(initialized);
+
+	if (entity.id == GECS_INVALID_ID || entity.gen == GECS_INVALID_GEN)
+		return false;
+
+	if (!SparseSetHasElement(&entities, entity.id))
+		return false;
+
+	if (currentIDsGeneration[entity.id - 1] != entity.gen)
+		return false;
+
+	return true;
+}
+
 void GECS_AttachComponent(ID entity, ComponentTypeID componentTypeID, void* componentData)
 {
 	GECS_EXPECT(initialized);

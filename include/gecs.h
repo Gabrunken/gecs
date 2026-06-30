@@ -44,6 +44,11 @@ ID GECS_CreateEntity(const char* name);
 //@param entity The target's entity ID.
 void GECS_DeleteEntity(ID entity);
 
+//@brief Checks if an entity exists.
+//@param entity The target's entity ID.
+//@return True if the entity exists, false otherwise.
+bool GECS_DoesEntityExist(ID entity);
+
 //@brief Attach a registered component to an existing entity.
 //You cannot attach the same component type to the same entity more than once.
 //@param componentData An allcated buffer long as the component type's size.
