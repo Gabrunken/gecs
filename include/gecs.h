@@ -60,6 +60,8 @@ void GECS_DetachComponent(ID entity, ComponentTypeID componentTypeID);
 //@return The retrieved component data on success. NULL if the entity doesn't have the component, useful to check existence.
 void* GECS_GetComponent(ID entity, ComponentTypeID componentTypeID);
 
+const char* GECS_GetEntityName(ID entity);
+
 struct SparseSet* GECS_GetComponentSparseSet(ComponentTypeID componentTypeID);
 
 //@brief Cleans up GECS, do it as soon as you're done with the library.

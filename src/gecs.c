@@ -99,6 +99,25 @@ void* GECS_GetComponent(ID entity, ComponentTypeID componentTypeID)
 	return SparseSetGetElement(set, entity.id);
 }
 
+const char* GECS_GetEntityName(ID entity)
+{
+	GECS_EXPECT(initialized);
+
+	if (entity.id == GECS_INVALID_ID || entity.gen == GECS_INVALID_GEN)
+	{
+		printf("GECS_GetEntityName ERROR: entity %zu of generation %zu is invalid.\n", entity.id, entity.gen);
+		return NULL;
+	}
+
+	if (currentIDsGeneration[entity.id - 1] != entity.gen)
+	{
+		printf("GECS_GetEntityName ERROR: entity %zu of generation %zu does not exist anymore.\n", entity.id, entity.gen);
+		return NULL;
+	}
+
+	return SparseSetGetElement(&entities, entity.id); //Returns NULL if there is no entity with that id.
+}
+
 void GECS_Init()
 {
 	GECS_EXPECT(!initialized);
