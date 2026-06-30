@@ -102,6 +102,7 @@ SystemID GECS_RegisterSystem(void (*callback)(ID, void**), int componentCount, .
 		if (componentTypeID > _registeredComponents.elementCount)
 		{
 			printf("GECS_RegisterSystem ERROR: componentTypeID %zu is not a valid component type.\n", componentTypeID);
+			va_end(args);
 			return GECS_INVALID_SYSTEM_ID;
 		}
 
@@ -134,7 +135,6 @@ void GECS_ExecuteSystem(SystemID systemID)
 	_SystemInfo* info = DYArrayGetElement(&_registeredSystems, systemID - 1);
 	struct SparseSet* componentSets[GECS_MAX_SYSTEM_COMPONENTS] = {0};
 	struct SparseSet* smallestSet;
-	uint8_t smallestSetIdx;
 
 	//Iterate through all system associated components and fetch the smallest set.
 	for (uint8_t i = 0; i < info->componentCount; i++)
@@ -145,7 +145,6 @@ void GECS_ExecuteSystem(SystemID systemID)
 		if (SparseSetGetElementCount(componentSets[i]) < SparseSetGetElementCount(smallestSet))
 		{
 			smallestSet = componentSets[i];
-			smallestSetIdx = i;
 		}
 	}
 
@@ -154,13 +153,13 @@ void GECS_ExecuteSystem(SystemID systemID)
 	void* components[GECS_MAX_SYSTEM_COMPONENTS] = {0};
 	for (size_t i = 0; i < smallestSetLength; i++)
 	{
-		bool archetypeFound = false;
+		bool archetypeFound = true;
 
 		//Find matching components
 		size_t smallestSetElementID = SparseSetGetIDFromPhysicalIndex(smallestSet, i);
 		for (uint8_t j = 0; j < info->componentCount; j++)
 		{
-			if (!SparseSetHasElement(componentSets[j], smallestSetElementID)) {break;}
+			if (!SparseSetHasElement(componentSets[j], smallestSetElementID)) {archetypeFound = false; break;}
 			components[j] = SparseSetGetElement(componentSets[j], smallestSetElementID);
 		}
 
