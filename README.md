@@ -1,5 +1,8 @@
 <h1>Gabro's Entity Component System</h1>
-...
+A pure, data oriented, simple ECS.
+GECS aims at providing the user a clean and intuitive API, but still being flexible and performant.
+Each function is documented and super easy to use and understand.
+
 <h1>Build</h1>
 You'll need CMake.
 Open a terminal in the root directory.
