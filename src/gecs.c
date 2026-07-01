@@ -1,12 +1,11 @@
-#include <vadefs.h>
 #define DYARRAY_IMPL
-#include "data_structures/dyarray.h"
+#include <dyarray.h>
 #include <gecs.h>
 #include <stdlib.h>
 #define SPARSE_SET_IMPL
-#include <data_structures/sparse_set.h>
+#include <sparse_set.h>
 #define HASHMAP_IMPL
-#include <data_structures/hashmap.h>
+#include <hashmap.h>
 #include <stdarg.h>
 
 #define GECS_INITIAL_ENTITY_ALLOC_SIZE 10'000
