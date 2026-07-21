@@ -18,10 +18,10 @@ is composed of.
 #define GECS_INVALID_COMPONENT_TYPE_ID 0
 #define GECS_INVALID_SYSTEM_ID 0
 
-#define GECS_ENTITY_NAME_MAX_LENGTH 24
+#define GECS_ENTITY_NAME_MAX_LENGTH 23
 #define GECS_MAX_SYSTEM_COMPONENTS 8
-#define GECS_MAX_COMPONENT_NAME_LENGTH 24
-#define GECS_MAX_COMPONENT_FIELD_NAME_LENGTH 24
+#define GECS_MAX_COMPONENT_NAME_LENGTH 23
+#define GECS_MAX_COMPONENT_FIELD_NAME_LENGTH 23
 #define GECS_MAX_REGISTERED_COMPONENTS 128
 #define GECS_MAX_COMPONENT_FIELDS 64
 
@@ -29,25 +29,31 @@ typedef struct
 {
     size_t id;
     size_t gen;
-} ID;
+} EntityID;
 
 typedef size_t ComponentTypeID;
 typedef size_t SystemID;
 
 typedef struct
 {
-	char name[GECS_MAX_COMPONENT_FIELD_NAME_LENGTH];
+	char name[GECS_MAX_COMPONENT_FIELD_NAME_LENGTH + 1];
 	uint32_t type;
 } ComponentFieldInfo;
 
 typedef struct
 {
 	ComponentFieldInfo componentFieldsInfo[GECS_MAX_COMPONENT_FIELDS];
-	char name[GECS_MAX_COMPONENT_NAME_LENGTH];
+	char name[GECS_MAX_COMPONENT_NAME_LENGTH + 1];
 	uint32_t fieldCount;
 } ComponentTypeInfo;
 
-typedef uint64_t ComponentsPresence[(GECS_MAX_REGISTERED_COMPONENTS + 63) / 64 /* manual ceil */];
+//typedef uint64_t ComponentsPresence[(GECS_MAX_REGISTERED_COMPONENTS + 63) / 64 /* manual ceil */];
+
+typedef struct
+{
+    char name[GECS_ENTITY_NAME_MAX_LENGTH + 1];
+    //ComponentsPresence components; It is best to do whole IDs instead of bitfield
+} EntityInfo;
 
 /*
  * @brief Initializes GECS, which is mandatory to use the library.
@@ -63,7 +69,7 @@ void GECS_Init();
  * The variadic field expects the ComponentTypeIDs of the System's Archetype, in order.
  * @return The SystemID used to identify the newly created System's Archetype in the system.
  */
-SystemID GECS_RegisterSystem(void (*callback)(ID, void**), int componentCount, ...);
+SystemID GECS_RegisterSystem(void (*callback)(EntityID, void**), int componentCount, ...);
 
 /*
  * @brief Execute the callback defined by the system registration.
@@ -102,45 +108,51 @@ const ComponentTypeInfo* GECS_GetComponentTypeInfo(ComponentTypeID componentType
  * @param name The name of the entity.
  * @return The newly created entity on success. GECS_INVALID_ID on failure.
  */
-ID GECS_CreateEntity(const char* name);
+EntityID GECS_CreateEntity(const char* name);
 
 /*
  * @brief Deletes an existing entity and its associated components.
  * @param entity The target's entity ID.
  */
-void GECS_DeleteEntity(ID entity);
+void GECS_DeleteEntity(EntityID entity);
 
 /*
  * @brief Checks if an entity exists.
  * @param entity The target's entity ID.
  * @return True if the entity exists, false otherwise.
  */
-bool GECS_DoesEntityExist(ID entity);
+bool GECS_DoesEntityExist(EntityID entity);
 
 /*
  * @brief Attach a registered component to an existing entity.
  * You cannot attach the same component type to the same entity more than once.
  * @param componentData An allcated buffer long as the component type's size.
  */
-void GECS_AttachComponent(ID entity, ComponentTypeID componentTypeID, void* componentData);
+void GECS_AttachComponent(EntityID entity, ComponentTypeID componentTypeID, void* componentData);
 
 /*
  * @brief Detach a registered component from an existing entity.
  */
-void GECS_DetachComponent(ID entity, ComponentTypeID componentTypeID);
+void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID);
 
 /*
  * @brief Retrieves the component object from a specified existing entity.
- * @return The retrieved component data on success. NULL if the entity doesn't have the component, useful to check existence.
+ * Is it useful to check if an entity has a component, but the more performant way is to use "GECS_DoesEntityHaveComponent".
+ * @return The retrieved component data on success. NULL if the entity doesn't have the component.
  */
-void* GECS_GetComponent(ID entity, ComponentTypeID componentTypeID);
+void* GECS_GetComponent(EntityID entity, ComponentTypeID componentTypeID);
 
 /*
- * @brief Retrieves a specified entity's name.
- * @param entity The target entity's ID.
- * @return The entity's null terminated name.
+ * @brief Fast way to know if an entity has a component
  */
-const char* GECS_GetEntityName(ID entity);
+bool GECS_DoesEntityHaveComponent(EntityID entity, ComponentTypeID componentTypeID);
+
+/*
+ * @brief Retrieves a specified entity's info.
+ * @param entity The target entity's ID.
+ * @return The entity's read-only info struct pointer.
+ */
+const EntityInfo* GECS_GetEntityInfo(EntityID entity);
 
 /*
  * @brief Cleans up GECS, do it as soon as you're done with the library.
