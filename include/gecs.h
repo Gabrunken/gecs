@@ -137,7 +137,7 @@ void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID);
 
 /*
  * @brief Retrieves the component object from a specified existing entity.
- * Is it useful to check if an entity has a component, but the more performant way is to use "GECS_DoesEntityHaveComponent".
+ * Is it useful to check if an entity has a component.
  * @return The retrieved component data on success. NULL if the entity doesn't have the component.
  */
 void* GECS_GetComponent(EntityID entity, ComponentTypeID componentTypeID);
@@ -145,7 +145,7 @@ void* GECS_GetComponent(EntityID entity, ComponentTypeID componentTypeID);
 /*
  * @brief Fast way to know if an entity has a component
  */
-bool GECS_DoesEntityHaveComponent(EntityID entity, ComponentTypeID componentTypeID);
+//bool GECS_DoesEntityHaveComponent(EntityID entity, ComponentTypeID componentTypeID);
 
 /*
  * @brief Retrieves a specified entity's info.
