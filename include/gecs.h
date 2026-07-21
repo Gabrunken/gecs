@@ -17,7 +17,13 @@ is composed of.
 #define GECS_INVALID_GEN 0
 #define GECS_INVALID_COMPONENT_TYPE_ID 0
 #define GECS_INVALID_SYSTEM_ID 0
+
 #define GECS_ENTITY_NAME_MAX_LENGTH 24
+#define GECS_MAX_SYSTEM_COMPONENTS 8
+#define GECS_MAX_COMPONENT_NAME_LENGTH 24
+#define GECS_MAX_COMPONENT_FIELD_NAME_LENGTH 24
+#define GECS_MAX_REGISTERED_COMPONENTS 128
+#define GECS_MAX_COMPONENT_FIELDS 64
 
 typedef struct
 {
@@ -27,6 +33,39 @@ typedef struct
 
 typedef size_t ComponentTypeID;
 typedef size_t SystemID;
+
+typedef struct
+{
+	char name[GECS_MAX_COMPONENT_FIELD_NAME_LENGTH];
+	uint32_t type;
+} ComponentFieldInfo;
+
+typedef struct
+{
+	ComponentFieldInfo componentFieldsInfo[GECS_MAX_COMPONENT_FIELDS];
+	char name[GECS_MAX_COMPONENT_NAME_LENGTH];
+	uint32_t fieldCount;
+} ComponentTypeInfo;
+
+/*
+typedef enum
+{
+    BOOL,
+    STRING,
+    FLOAT,
+    DOUBLE,
+
+    INT8,
+    INT16,
+    INT32,
+    INT64,
+
+    UINT8,
+    UINT16,
+    UINT32,
+    UINT64
+} FieldType;
+*/
 
 //@brief Initializes GECS, which is mandatory to use the library.
 void GECS_Init();
@@ -47,8 +86,25 @@ void GECS_ExecuteSystem(SystemID systemID);
 //@brief Register a component type in the system.
 //To attach any component to an entity, it must be registered through this function.
 //@param size The size in bytes of the singular component.
+//@param name The name of this component type.
+//@param fieldCount The number of elements (fields) this component consists of.
+//The variadic field is used to describe the elements this component has, coupled with the
+//previous argument "fieldCount", to provide introspection information for the system.
+//This field is made of "fieldType" and "fieldName" pairs, so for each field in the component,
+//insert the type and name in this order. The fields must be EXACTLY ordered and layed out as
+//you would use them in memory, with the fieldType also indicating the byte size of that field.
+//NOTE: the field types must be defined by the user, since it might have its own custom types,
+//and not basic ones such as simple primitives (int, bool, float). For that, do your own enum.
 //@return The unique id assigned to the newly registered component type.
-ComponentTypeID GECS_RegisterComponent(size_t size);
+ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t fieldCount, ...);
+
+/*
+ * @brief Get a component type meta data.
+ * @param componentTypeID The id of the requested component type.
+ * @return A pointer to a read-only struct that contains the meta data for this
+ * component type.
+ */
+const ComponentTypeInfo* GECS_GetComponentTypeInfo(ComponentTypeID componentTypeID);
 
 //@brief Creates an entity in the system.
 //More than 1 entity can have the same name at the same time.
