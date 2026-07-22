@@ -22,7 +22,7 @@ is composed of.
 #define GECS_MAX_SYSTEM_COMPONENTS 8
 #define GECS_MAX_COMPONENT_NAME_LENGTH 23
 #define GECS_MAX_COMPONENT_FIELD_NAME_LENGTH 23
-#define GECS_MAX_REGISTERED_COMPONENTS 128
+#define GECS_MAX_REGISTERED_COMPONENTS 128 /* Should never exceed 255, i'm using a uint8_t */
 #define GECS_MAX_COMPONENT_FIELDS 64
 
 typedef struct
@@ -31,8 +31,8 @@ typedef struct
     size_t gen;
 } EntityID;
 
-typedef size_t ComponentTypeID;
-typedef size_t SystemID;
+typedef uint8_t ComponentTypeID;
+typedef size_t SystemID; /* Big enough for storing as many systems as needed, i do no max checkings, so if you fuck up you fuck up. Congrats. */
 
 typedef struct
 {
@@ -47,12 +47,16 @@ typedef struct
 	uint32_t fieldCount;
 } ComponentTypeInfo;
 
-//typedef uint64_t ComponentsPresence[(GECS_MAX_REGISTERED_COMPONENTS + 63) / 64 /* manual ceil */];
-
 typedef struct
 {
     char name[GECS_ENTITY_NAME_MAX_LENGTH + 1];
-    //ComponentsPresence components; It is best to do whole IDs instead of bitfield
+    /*
+     * The components this entity has (existence, not value).
+     * These are NOT ordered, this is a dense, not ordered flat array.
+     */
+    ComponentTypeID componentsPresence[GECS_MAX_REGISTERED_COMPONENTS];
+    uint8_t componentIDToPresenceIdx[GECS_MAX_REGISTERED_COMPONENTS];
+    uint8_t componentCount;
 } EntityInfo;
 
 /*

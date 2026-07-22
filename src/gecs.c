@@ -103,13 +103,15 @@ SystemID GECS_RegisterSystem(void (*callback)(EntityID, void**), int componentCo
 	ComponentTypeID componentTypeID;
 	for (int i = 0; i < componentCount; i++)
 	{
-		componentTypeID = va_arg(args, ComponentTypeID);
-		if (componentTypeID > _registeredComponents.elementCount)
-		{
-			printf("GECS_RegisterSystem ERROR: componentTypeID %zu is not a valid component type.\n", componentTypeID);
+		int notSafeID = va_arg(args, int); //Variadic arguments are always promoted to int, even if smaller
+		//Check if the user fucked up, by providing an invalid id
+		if (!(notSafeID > 0 && notSafeID <= _registeredComponents.elementCount)){
+			printf("GECS_RegisterSystem ERROR: the input ID %d is not a valid component type.\n", notSafeID);
 			va_end(args);
 			return GECS_INVALID_SYSTEM_ID;
 		}
+
+		componentTypeID = notSafeID; //Now safe lol
 
 		info.components[i] = componentTypeID;
 	}
@@ -190,7 +192,7 @@ struct SparseSet* _GECS_GetComponentSparseSet(ComponentTypeID componentTypeID)
 	GECS_EXPECT(_initialized);
 
 	if (!_GECS_DoesComponentTypeExist(componentTypeID)){
-		printf("_GECS_GetComponentSparseSet ERROR: componentTypeID %zu does not exist.\n", componentTypeID);
+		printf("_GECS_GetComponentSparseSet ERROR: componentTypeID %d does not exist.\n", componentTypeID);
 		return NULL;
 	}
 
@@ -209,7 +211,7 @@ void* GECS_GetComponent(EntityID entity, ComponentTypeID componentTypeID)
 
 	struct SparseSet* set = _GECS_GetComponentSparseSet(componentTypeID);
 	if (!set){
-		printf("GECS_GetComponent ERROR: componentTypeID %zu is not valid.\n", componentTypeID);
+		printf("GECS_GetComponent ERROR: componentTypeID %d is not valid.\n", componentTypeID);
 		return NULL;
 	}
 
@@ -293,7 +295,7 @@ const ComponentTypeInfo* GECS_GetComponentTypeInfo(ComponentTypeID componentType
 	GECS_EXPECT(_initialized);
 
 	if (!_GECS_DoesComponentTypeExist(componentTypeID)){
-		printf("GECS_GetComponentTypeInfo ERROR: componentTypeID %zu does not exist.\n", componentTypeID);
+		printf("GECS_GetComponentTypeInfo ERROR: componentTypeID %d does not exist.\n", componentTypeID);
 		return NULL;
 	}
 
@@ -372,6 +374,7 @@ EntityID GECS_CreateEntity(const char *name)
 	}
 
 	EntityInfo entity = {0};
+	memset(entity.componentIDToPresenceIdx, 255, GECS_MAX_REGISTERED_COMPONENTS * sizeof(uint8_t));
 
 	strncpy(entity.name, name, GECS_ENTITY_NAME_MAX_LENGTH);
 
@@ -389,6 +392,20 @@ void GECS_DeleteEntity(EntityID entity)
 		return;
 	}
 
+	//First remove any components it had, by checking its metadata
+	EntityInfo* entityInfo = SparseSetGetElement(&_entities, entity.id);
+	for (uint8_t i = 0; i < entityInfo->componentCount; i++)
+	{
+		ComponentTypeID target = entityInfo->componentsPresence[i];
+
+		_RegisteredComponent* componentInfo = DYArrayGetElement(&_registeredComponents, target - 1);
+		struct SparseSet* componentSet = &componentInfo->set;
+
+		SparseSetRemoveElement(componentSet, entity.id);
+
+		printf("Removed component\n");
+	}
+
 	//Add the removed id to the free list
 	//A size check !should! not be necessary since when generating a new id
 	//this array gets resized to fulfill any bounds.
@@ -396,19 +413,6 @@ void GECS_DeleteEntity(EntityID entity)
 	_freeIDCount++;
 
 	SparseSetRemoveElement(&_entities, entity.id);
-
-	//Remove any components it had.
-	//Iterate for each element registered in the system and check if it contains this entity's EntityID.
-	for (size_t i = 0; i < _registeredComponents.elementCount; i++)
-	{
-		_RegisteredComponent* componentInfo = DYArrayGetElement(&_registeredComponents, i);
-		struct SparseSet* set = &componentInfo->set;
-
-		if (SparseSetHasElement(set, entity.id))
-		{
-			SparseSetRemoveElement(set, entity.id);
-		}
-	}
 }
 
 bool GECS_DoesEntityExist(EntityID entity)
@@ -444,18 +448,23 @@ void GECS_AttachComponent(EntityID entity, ComponentTypeID componentTypeID, void
 
 	struct SparseSet* componentSet = _GECS_GetComponentSparseSet(componentTypeID);
 	if (!componentSet){
-		printf("GECS_AttachComponent ERROR: componentTypeID %zu is not valid.\n", componentTypeID);
+		printf("GECS_AttachComponent ERROR: componentTypeID %d is not valid.\n", componentTypeID);
 		return;
 	}
 
 	//Check if the entity already has that component type
 	if (SparseSetHasElement(componentSet, entity.id))
 	{
-		printf("GECS_AttachComponent ERROR: entity %zu already has component type of id %zu.\n", entity.id, componentTypeID);
+		printf("GECS_AttachComponent ERROR: entity %zu already has component type of id %d.\n", entity.id, componentTypeID);
 		return;
 	}
 
 	SparseSetAddElement(componentSet, entity.id, componentData);
+
+	EntityInfo* entityInfo = SparseSetGetElement(&_entities, entity.id);
+	entityInfo->componentsPresence[entityInfo->componentCount] = componentTypeID;
+	entityInfo->componentIDToPresenceIdx[componentTypeID - 1] = entityInfo->componentCount;
+	entityInfo->componentCount++;
 }
 
 void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID)
@@ -469,18 +478,26 @@ void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID)
 
 	struct SparseSet* componentSet = _GECS_GetComponentSparseSet(componentTypeID);
 	if (!componentSet){
-		printf("GECS_DetachComponent ERROR: componentTypeID %zu is not valid.\n", componentTypeID);
+		printf("GECS_DetachComponent ERROR: componentTypeID %d is not valid.\n", componentTypeID);
 		return;
 	}
 
 	//Check if the entity has that component
 	if (!SparseSetHasElement(componentSet, entity.id))
 	{
-		printf("GECS_DetachComponent ERROR: entity %zu does not have component type id %zu.\n", entity.id, componentTypeID);
+		printf("GECS_DetachComponent ERROR: entity %zu does not have component type id %d.\n", entity.id, componentTypeID);
 		return;
 	}
 
 	SparseSetRemoveElement(componentSet, entity.id);
+
+	EntityInfo* entityInfo = SparseSetGetElement(&_entities, entity.id);
+	//Swap and pop
+	//I could check if the index is 255 (no component), but i do this check above
+	uint8_t targetIdx = entityInfo->componentIDToPresenceIdx[componentTypeID - 1];
+	entityInfo->componentsPresence[targetIdx] = entityInfo->componentsPresence[entityInfo->componentCount - 1];
+	entityInfo->componentIDToPresenceIdx[componentTypeID - 1] = 255; /* Invalid index, since in the system there can only be no more than 255 components */
+	entityInfo->componentCount--;
 }
 
 void GECS_CleanUp()

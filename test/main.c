@@ -24,7 +24,7 @@ int main()
 	printf("Component Type Info:\n\tname %s\n\tfield count %d\n\t", info->name, info->fieldCount);
 	for (uint32_t i = 0; i < info->fieldCount; i++)
 	{
-		printf("%s %d\n\t", info->componentFieldsInfo[i].name, info->componentFieldsInfo->type);
+		printf("%s %d\n\t", info->componentFieldsInfo[i].name, info->componentFieldsInfo[i].type);
 	}
 
 	puts("");
