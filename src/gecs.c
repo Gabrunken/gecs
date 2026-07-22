@@ -402,8 +402,6 @@ void GECS_DeleteEntity(EntityID entity)
 		struct SparseSet* componentSet = &componentInfo->set;
 
 		SparseSetRemoveElement(componentSet, entity.id);
-
-		printf("Removed component\n");
 	}
 
 	//Add the removed id to the free list
