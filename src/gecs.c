@@ -17,18 +17,6 @@ typedef struct
 	ComponentTypeInfo info;
 } _RegisteredComponent;
 
-//Contains a SparseSet for each component type registered.
-//Any component cannot be removed once registered.
-static dyarray _registeredComponents;
-static struct SparseSet _entities;
-
-//Generational IDs
-static size_t* _currentIDsGeneration;
-static size_t _currentIDsGenerationLen;
-//Refactor to use dyarray (this is used like a stack so the swap and pop removal works)
-static size_t* _currentIDsFreeList;
-static size_t _freeIDCount;
-
 typedef struct
 {
 	//In order!
@@ -37,7 +25,25 @@ typedef struct
 	uint8_t componentCount;
 } _SystemInfo;
 
-dyarray _registeredSystems; //SystemID(s) will be used as indices (starting from 1) for this array containing _SystemInfo(s).
+/*
+ * Vector containing "_SystemInfo" struct for each registered system.
+ */
+static dyarray _registeredSystems; //SystemID(s) will be used as indices (starting from 1) for this array containing _SystemInfo(s).
+
+/*
+ * Contains a "_RegisteredComponent" struct for each registered component type.
+ * Any component cannot be removed once registered.
+ */
+static dyarray _registeredComponents;
+
+/*
+ * A SparseSet containing "EntityInfo" structs for each entity created.
+ */
+static struct SparseSet _entities;
+
+//Generational IDs
+static dyarray _currentIDsGeneration;
+static dyarray _currentIDsFreeList;
 
 static bool _initialized;
 
@@ -60,14 +66,12 @@ void GECS_Init()
 
 	SparseSetCreate(&_entities, 0, sizeof(EntityInfo));
 
-	_currentIDsGenerationLen = GECS_INITIAL_ENTITY_ALLOC_SIZE;
-	_currentIDsGeneration = calloc(_currentIDsGenerationLen, sizeof(size_t));
-	EXPECT(_currentIDsGeneration);
-	_currentIDsFreeList = calloc(_currentIDsGenerationLen, sizeof(size_t));
-	EXPECT(_currentIDsFreeList);
+	DyArrayCreate(&_currentIDsGeneration, sizeof(size_t), 100);
+	DyArrayCreate(&_currentIDsFreeList, sizeof(size_t), 100);
+	GECS_EXPECT(_currentIDsGeneration.buf && _currentIDsFreeList.buf);
 
-	EXPECT(DYArrayCreate(&_registeredComponents, sizeof(_RegisteredComponent), 10));
-	EXPECT(DYArrayCreate(&_registeredSystems, sizeof(_SystemInfo), 10));
+	GECS_EXPECT(DyArrayCreate(&_registeredComponents, sizeof(_RegisteredComponent), 10));
+	GECS_EXPECT(DyArrayCreate(&_registeredSystems, sizeof(_SystemInfo), 10));
 
 	_initialized = true;
 }
@@ -116,7 +120,7 @@ SystemID GECS_RegisterSystem(void (*callback)(EntityID, void**), int componentCo
 		info.components[i] = componentTypeID;
 	}
 
-	DYArrayAddElement(&_registeredSystems, &info);
+	DyArrayAddElement(&_registeredSystems, &info);
 
 	va_end(args);
 
@@ -139,7 +143,7 @@ void GECS_ExecuteSystem(SystemID systemID)
 		return;
 	}
 
-	_SystemInfo* info = DYArrayGetElement(&_registeredSystems, systemID - 1);
+	_SystemInfo* info = DyArrayGetElement(&_registeredSystems, systemID - 1);
 	struct SparseSet* componentSets[GECS_MAX_SYSTEM_COMPONENTS] = {0};
 	struct SparseSet* smallestSet;
 
@@ -172,7 +176,8 @@ void GECS_ExecuteSystem(SystemID systemID)
 
 		if (!archetypeFound) continue;
 
-		info->callback((EntityID){smallestSetElementID, _currentIDsGeneration[smallestSetElementID - 1]}, components);
+		size_t gen = *(size_t*)DyArrayGetElement(&_currentIDsGeneration, smallestSetElementID - 1);
+		info->callback((EntityID){smallestSetElementID, gen}, components);
 	}
 }
 
@@ -196,7 +201,7 @@ struct SparseSet* _GECS_GetComponentSparseSet(ComponentTypeID componentTypeID)
 		return NULL;
 	}
 
-	_RegisteredComponent* componentInfo = DYArrayGetElement(&_registeredComponents, componentTypeID - 1);
+	_RegisteredComponent* componentInfo = DyArrayGetElement(&_registeredComponents, componentTypeID - 1);
 	return &componentInfo->set;
 }
 
@@ -284,7 +289,7 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 	SparseSetCreate(&set, 0, size);
 	componentInfo.set = set;
 
-	DYArrayAddElement(&_registeredComponents, &componentInfo);
+	DyArrayAddElement(&_registeredComponents, &componentInfo);
 
 	//The first ComponentTypeID starts from 1.
 	return _registeredComponents.elementCount;
@@ -299,7 +304,7 @@ const ComponentTypeInfo* GECS_GetComponentTypeInfo(ComponentTypeID componentType
 		return NULL;
 	}
 
-	_RegisteredComponent* componentInfo = DYArrayGetElement(&_registeredComponents, componentTypeID - 1);
+	_RegisteredComponent* componentInfo = DyArrayGetElement(&_registeredComponents, componentTypeID - 1);
 	return &componentInfo->info;
 }
 
@@ -313,32 +318,28 @@ static EntityID _GECS_GetNewID()
 	size_t entityCount = SparseSetGetElementCount(&_entities);
 
 	//Check if theres something in the free list
-	if (_freeIDCount > 0)
+	if (_currentIDsFreeList.elementCount > 0)
 	{
 		//Take last element
-		_freeIDCount--;
-		size_t freeIDIdx = _currentIDsFreeList[_freeIDCount];
-		_currentIDsGeneration[freeIDIdx]++;
-		id.id = freeIDIdx + 1;
-		id.gen = _currentIDsGeneration[freeIDIdx];
-		return id;
-	}
+		size_t freeIDIdx = *(size_t*)DyArrayGetElement(&_currentIDsFreeList, _currentIDsFreeList.elementCount - 1);
 
-	//Resize it if necessary
-	if (_currentIDsGenerationLen <= entityCount)
-	{
-		_currentIDsGenerationLen++; //Hard fix if the len was initially 0
-		_currentIDsGenerationLen *= 2;
-		_currentIDsGeneration = realloc(_currentIDsGeneration, _currentIDsGenerationLen * sizeof(size_t));
-		EXPECT(_currentIDsGeneration);
-		_currentIDsFreeList = realloc(_currentIDsFreeList, _currentIDsGenerationLen * sizeof(size_t));
-		EXPECT(_currentIDsFreeList);
+		size_t currentGen = *(size_t*)DyArrayGetElement(&_currentIDsGeneration, freeIDIdx);
+		currentGen++;
+
+		DyArraySetElement(&_currentIDsGeneration, freeIDIdx, &currentGen);
+
+		id.id = freeIDIdx + 1;
+		id.gen = currentGen;
+
+		DyArrayRemoveElementSP(&_currentIDsFreeList, _currentIDsFreeList.elementCount - 1);
+		return id;
 	}
 
 	//Brand new EntityID
 	id.id = entityCount + 1;
 	id.gen = 1;
-	_currentIDsGeneration[entityCount] = id.gen;
+
+	DyArrayAddElement(&_currentIDsGeneration, &id.gen);
 
 	return id;
 }
@@ -398,17 +399,15 @@ void GECS_DeleteEntity(EntityID entity)
 	{
 		ComponentTypeID target = entityInfo->componentsPresence[i];
 
-		_RegisteredComponent* componentInfo = DYArrayGetElement(&_registeredComponents, target - 1);
+		_RegisteredComponent* componentInfo = DyArrayGetElement(&_registeredComponents, target - 1);
 		struct SparseSet* componentSet = &componentInfo->set;
 
 		SparseSetRemoveElement(componentSet, entity.id);
 	}
 
 	//Add the removed id to the free list
-	//A size check !should! not be necessary since when generating a new id
-	//this array gets resized to fulfill any bounds.
-	_currentIDsFreeList[_freeIDCount] = entity.id - 1;
-	_freeIDCount++;
+	size_t freeIDIdx = entity.id - 1;
+	DyArrayAddElement(&_currentIDsFreeList, &freeIDIdx);
 
 	SparseSetRemoveElement(&_entities, entity.id);
 }
@@ -423,7 +422,8 @@ bool GECS_DoesEntityExist(EntityID entity)
 	if (!SparseSetHasElement(&_entities, entity.id))
 		return false;
 
-	if (_currentIDsGeneration[entity.id - 1] != entity.gen)
+	size_t gen = *(size_t*)DyArrayGetElement(&_currentIDsGeneration, entity.id - 1);
+	if (gen != entity.gen)
 		return false;
 
 	return true;
@@ -505,20 +505,121 @@ void GECS_CleanUp()
 	//Free sparse sets
 	for (size_t i = 0; i < _registeredComponents.elementCount; i++)
 	{
-		_RegisteredComponent* componentInfo = DYArrayGetElement(&_registeredComponents, i);
+		_RegisteredComponent* componentInfo = DyArrayGetElement(&_registeredComponents, i);
 		SparseSetFree(&componentInfo->set);
 	}
 
-	DYArrayFree(&_registeredComponents);
-	DYArrayFree(&_registeredSystems);
+	DyArrayFree(&_registeredComponents);
+	DyArrayFree(&_registeredSystems);
 
-	free(_currentIDsFreeList);
-	free(_currentIDsGeneration);
-
-	_currentIDsGenerationLen = 0;
-	_freeIDCount = 0;
+	DyArrayFree(&_currentIDsGeneration);
+	DyArrayFree(&_currentIDsFreeList);
 
 	SparseSetFree(&_entities);
 
 	_initialized = false;
+}
+
+/*
+ * ===========================================================================
+ * ================================ SNAPSHOTS ================================
+ * ===========================================================================
+ */
+
+GECSSnapshot GECS_MakeSnapshot() {
+	GECS_EXPECT(_initialized);
+
+	/*
+	 * Copy the current state of components and entities in a buffer.
+	 * The useful data to load is the whole entity sparse set and
+	 * each _RegisteredComponent present in the system.
+	 * Also copy the free list and gen list
+	 */
+
+	GECSSnapshot snapshot = {0};
+
+	DyArrayClone(&_currentIDsGeneration, &snapshot.IDsGeneration);
+	DyArrayClone(&_currentIDsFreeList, &snapshot.IDsFreeList);
+	SparseSetClone(&_entities, &snapshot.entitySparseSet);
+
+	DyArrayClone(&_registeredComponents, &snapshot.componentSparseSets);
+	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
+		struct SparseSet* componentSet = DyArrayGetElement(&_registeredComponents, i);
+		struct SparseSet newSet = {0};
+		SparseSetClone(componentSet, &newSet);
+
+		DyArraySetElement(&snapshot.componentSparseSets, i, &newSet);
+	}
+
+	return snapshot;
+}
+
+void GECS_LoadSnapshot(const GECSSnapshot* snapshot) {
+	GECS_EXPECT(_initialized);
+
+	if (!GECS_IsSnapshotValid(snapshot)) {
+		printf("GECS_LoadSnapshot ERROR: snapshot is not valid.\n");
+		return;
+	}
+
+	//First free our current structures
+	DyArrayFree(&_currentIDsGeneration);
+	DyArrayFree(&_currentIDsFreeList);
+	SparseSetFree(&_entities);
+
+	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
+		struct SparseSet* set = DyArrayGetElement(&_registeredComponents, i);
+		SparseSetFree(set);
+	}
+
+	DyArrayFree(&_registeredComponents);
+
+	//Now let's clone the ones in the snapshot
+	DyArrayClone((void*)&snapshot->IDsGeneration, &_currentIDsGeneration);
+	DyArrayClone((void*)&snapshot->IDsFreeList, &_currentIDsFreeList);
+	SparseSetClone((void*)&snapshot->entitySparseSet, &_entities);
+
+	DyArrayClone((void*)&snapshot->componentSparseSets, &_registeredComponents);
+	for (size_t i = 0; i < snapshot->componentSparseSets.elementCount; i++) {
+		struct SparseSet* ogSet = DyArrayGetElement((void*)&snapshot->componentSparseSets, i);
+		struct SparseSet* newSet = DyArrayGetElement(&_registeredComponents, i);
+		SparseSetClone(ogSet, newSet);
+	}
+}
+
+bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath);
+GECSSnapshot GECS_MakeSnapshotFromFisk(const char* filePath);
+
+bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath);
+bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath);
+
+void GECS_FreeSnapshot(GECSSnapshot* snapshot) {
+	GECS_EXPECT(_initialized);
+
+	//Also accepts NULL
+	if (!GECS_IsSnapshotValid(snapshot)) {
+		printf("GECS_FreeSnapshot ERROR: snapshot is not valid.");
+		return;
+	}
+
+	DyArrayFree(&snapshot->IDsGeneration);
+	DyArrayFree(&snapshot->IDsFreeList);
+	SparseSetFree(&snapshot->entitySparseSet);
+
+	for (size_t i = 0; i < snapshot->componentSparseSets.elementCount; i++) {
+		struct SparseSet* set = DyArrayGetElement(&snapshot->componentSparseSets, i);
+		SparseSetFree(set);
+	}
+
+	DyArrayFree(&snapshot->componentSparseSets);
+}
+
+bool GECS_IsSnapshotValid(const GECSSnapshot* snapshot) {
+	if (!snapshot) return false;
+
+	//I should check everything... fuck no.
+	if (snapshot->IDsGeneration.buf && snapshot->IDsFreeList.buf && snapshot->componentSparseSets.buf && snapshot->entitySparseSet.data)
+		return true;
+
+	return false;
 }

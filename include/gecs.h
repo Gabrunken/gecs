@@ -12,6 +12,8 @@ is composed of.
 
 #include <stddef.h>
 #include <stdint.h>
+#include <dyarray.h>
+#include <sparse_set.h>
 
 #define GECS_INVALID_ID 0
 #define GECS_INVALID_GEN 0
@@ -59,6 +61,14 @@ typedef struct
     uint8_t componentCount;
 } EntityInfo;
 
+typedef struct
+{
+    dyarray IDsGeneration;
+    dyarray IDsFreeList;
+    struct SparseSet entitySparseSet;
+    dyarray componentSparseSets;
+} GECSSnapshot;
+
 /*
  * @brief Initializes GECS, which is mandatory to use the library.
  */
@@ -97,6 +107,72 @@ void GECS_ExecuteSystem(SystemID systemID);
  * @return The unique id assigned to the newly registered component type.
  */
 ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t fieldCount, ...);
+
+/*
+ * @brief Saves the current Entity-Component instance's state into a file.
+ * @param snapshot The loaded snapshot to save.
+ * @param filePath a file path to the desired file destination.
+ * @return True on success, False on failure.
+ */
+bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath);
+
+/*
+ * @brief Loads the snapshot file into a GECSSnapshot struct.
+ * @param filePath The snapshot's file path.
+ * If the function fails to load the snapshot correctly, it will
+ * return an invalid snapshot. Check with GECS_IsSnaphotValid.
+ * A valid snapshot must be freed after use with GECS_FreeSnapshot.
+ * @return The loaded snapshot.
+ */
+GECSSnapshot GECS_MakeSnapshotFromFisk(const char* filePath);
+
+/*
+ * @brief Directly saves the current state of the ECS in a file.
+ * @param filePath The destination file path.
+ * This function is faster than calling MakeSnapshot and SaveSnapshotInDisk
+ * since it does not do an intermediate buffer allocation nor copy.
+ * Altho if you needed the buffer for later use, you can still call MakeSnapshot manually.
+ * @return True on success, False on failure.
+ */
+bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath);
+
+/*
+ * @brief Directly creates and loads a snapshot into the ECS from a file.
+ * @param filePath The source file path.
+ * This function is faster than calling MakeSnapshot and LoadSnapshotFromDisk
+ * since it does not do an intermediate buffer allocation nor copy.
+ * Altho if you needed the buffer for later use, you can still call MakeSnapshot manually.
+ * @return True on success, False on failure.
+ */
+bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath);
+
+/*
+ * @brief Makes a snapshot of the current state of GECS.
+ * This function will save the binary data of each entity and component associated,
+ * altho it does NOT save component nor system registration.
+ * A valid snapshot must be freed after use with GECS_FreeSnapshot.
+ * @return The allocated snapshot.
+ */
+GECSSnapshot GECS_MakeSnapshot();
+
+/*
+ * @brief Load into GECS the passed snapshot.
+ * IMPORTANT: snapshots may not be compatible with different instances of GECS;
+ * To successfully load a snapshot you must first assure that your ComponentTypes
+ * match exactly the ones used in the passed snapshot, otherwise it will cause Undefined Behaviour.
+ */
+void GECS_LoadSnapshot(const GECSSnapshot* snapshot);
+
+/*
+ * @brief Frees the memory allocated by the passed snapshot.
+ */
+void GECS_FreeSnapshot(GECSSnapshot* snapshot);
+
+/*
+ * @brief Check if the passed snapshot is valid.
+ * @return True if the snapshot is valid, False otherwise.
+ */
+bool GECS_IsSnapshotValid(const GECSSnapshot* snapshot);
 
 /*
  * @brief Get a component type meta data.
