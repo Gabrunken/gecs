@@ -1,13 +1,14 @@
 #include <string.h>
 #define DYARRAY_IMPL
 #include <dyarray.h>
-#include <gecs.h>
 #include <stdlib.h>
 #define SPARSE_SET_IMPL
 #include <sparse_set.h>
 #define HASHMAP_IMPL
 #include <hashmap.h>
 #include <stdarg.h>
+
+#include <gecs.h> //Put it last to avoid reincluding single-headers.
 
 #define GECS_INITIAL_ENTITY_ALLOC_SIZE 10'000
 
