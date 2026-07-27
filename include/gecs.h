@@ -66,7 +66,7 @@ typedef struct
     dyarray IDsGeneration;
     dyarray IDsFreeList;
     struct SparseSet entitySparseSet;
-    dyarray componentSparseSets;
+    dyarray componentSparseSets; //Contains only SparseSets, not _RegisteredComponent data
 } GECSSnapshot;
 
 /*

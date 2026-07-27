@@ -543,13 +543,14 @@ GECSSnapshot GECS_MakeSnapshot() {
 	DyArrayClone(&_currentIDsFreeList, &snapshot.IDsFreeList);
 	SparseSetClone(&_entities, &snapshot.entitySparseSet);
 
-	DyArrayClone(&_registeredComponents, &snapshot.componentSparseSets);
+	DyArrayCreate(&snapshot.componentSparseSets, sizeof(struct SparseSet), 10); //I create it manually because i don't need the ComponentTypeInfo
 	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
-		struct SparseSet* componentSet = DyArrayGetElement(&_registeredComponents, i);
-		struct SparseSet newSet = {0};
-		SparseSetClone(componentSet, &newSet);
+		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
 
-		DyArraySetElement(&snapshot.componentSparseSets, i, &newSet);
+		DyArrayAddElement(&snapshot.componentSparseSets, &registeredComponent->set); //Do a temporary shallow copy
+		struct SparseSet* setToClone = DyArrayGetElement(&snapshot.componentSparseSets, i);
+
+		SparseSetClone(&registeredComponent->set, setToClone); //Do a deep copy
 	}
 
 	return snapshot;
@@ -569,22 +570,19 @@ void GECS_LoadSnapshot(const GECSSnapshot* snapshot) {
 	SparseSetFree(&_entities);
 
 	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
-		struct SparseSet* set = DyArrayGetElement(&_registeredComponents, i);
-		SparseSetFree(set);
+		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
+		SparseSetFree(&registeredComponent->set);
 	}
 
-	DyArrayFree(&_registeredComponents);
-
-	//Now let's clone the ones in the snapshot
+	//Now let's clone the ones in the snapshot to load them in the current system.
 	DyArrayClone((void*)&snapshot->IDsGeneration, &_currentIDsGeneration);
 	DyArrayClone((void*)&snapshot->IDsFreeList, &_currentIDsFreeList);
 	SparseSetClone((void*)&snapshot->entitySparseSet, &_entities);
 
-	DyArrayClone((void*)&snapshot->componentSparseSets, &_registeredComponents);
 	for (size_t i = 0; i < snapshot->componentSparseSets.elementCount; i++) {
-		struct SparseSet* ogSet = DyArrayGetElement((void*)&snapshot->componentSparseSets, i);
-		struct SparseSet* newSet = DyArrayGetElement(&_registeredComponents, i);
-		SparseSetClone(ogSet, newSet);
+		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
+		struct SparseSet* setToClone = DyArrayGetElement((void*)&snapshot->componentSparseSets, i);
+		SparseSetClone(setToClone, &registeredComponent->set);
 	}
 }
 
