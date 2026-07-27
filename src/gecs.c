@@ -612,20 +612,54 @@ bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath)
 
 	typedef struct
 	{
-    dyarray IDsGeneration;
-    dyarray IDsFreeList;
-    struct SparseSet entitySparseSet;
-    dyarray componentSparseSets; //Contains only SparseSets, not _RegisteredComponent data
+	    dyarray IDsGeneration;
+	    dyarray IDsFreeList;
+	    struct SparseSet entitySparseSet;
+	    dyarray componentSparseSets; //Contains only SparseSets, not _RegisteredComponent data
 	} GECSSnapshot;
 
+	DyArraySerialize((void*)&snapshot->IDsGeneration, file);
+	DyArraySerialize((void*)&snapshot->IDsFreeList, file);
+	SparseSetSerialize((void*)&snapshot->entitySparseSet, file);
 
+	//Do dyarray manually
+	fwrite(&snapshot->componentSparseSets.bufCapacity, 1, sizeof(size_t), file);
+	fwrite(&snapshot->componentSparseSets.elementSize, 1, sizeof(size_t), file);
+	fwrite(&snapshot->componentSparseSets.elementCount, 1, sizeof(size_t), file);
+
+	for (size_t i = 0; i < snapshot->componentSparseSets.elementCount; i++) {
+		struct SparseSet* setToSerialize = DyArrayGetElement((void*)&snapshot->componentSparseSets, i);
+		SparseSetSerialize(setToSerialize, file);
+	}
 
 	fclose(file);
 
 	return true;
 }
 
-GECSSnapshot GECS_MakeSnapshotFromFisk(const char* filePath);
+GECSSnapshot GECS_MakeSnapshotFromFisk(const char* filePath) {
+	GECS_EXPECT(_initialized);
+
+	GECSSnapshot snapshotToMake = {0};
+
+	if (!filePath || strlen(filePath) == 0) {
+		printf("GECS_MakeSnapshotFromFisk ERROR: filePath is not valid.\n");
+		return snapshotToMake;
+	}
+
+	FILE* file = fopen(filePath, "rb");
+	if (!file) {
+		printf("GECS_MakeSnapshotFromFisk ERROR: could not open file at path %s.\n", filePath);
+		return snapshotToMake;
+	}
+
+	//Deserialize file and put inside snapshot.
+	// TODO.
+
+	fclose(file);
+
+	return snapshotToMake;
+}
 
 bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath);
 bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath);
