@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 #define DYARRAY_IMPL
 #include <dyarray.h>
@@ -586,7 +587,44 @@ void GECS_LoadSnapshot(const GECSSnapshot* snapshot) {
 	}
 }
 
-bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath);
+bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath) {
+	GECS_EXPECT(_initialized);
+
+	if (!GECS_IsSnapshotValid(snapshot)) {
+		printf("GECS_SaveSnapshotInDisk ERROR: snapshot is not valid.\n");
+		return false;
+	}
+
+	if (!filePath || strlen(filePath) == 0) {
+		printf("GECS_SaveSnapshotInDisk ERROR: filePath is not valid.\n");
+		return false;
+	}
+
+	FILE* file = fopen(filePath, "wb");
+	if (!file) {
+		printf("GECS_SaveSnapshotInDisk ERROR: could not open nor create file at path %s.\n", filePath);
+		return false;
+	}
+
+	/*
+	 * Formatted like this:
+	 */
+
+	typedef struct
+	{
+    dyarray IDsGeneration;
+    dyarray IDsFreeList;
+    struct SparseSet entitySparseSet;
+    dyarray componentSparseSets; //Contains only SparseSets, not _RegisteredComponent data
+	} GECSSnapshot;
+
+
+
+	fclose(file);
+
+	return true;
+}
+
 GECSSnapshot GECS_MakeSnapshotFromFisk(const char* filePath);
 
 bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath);
