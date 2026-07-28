@@ -22,6 +22,8 @@ target_include_directories(gecslib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(gecslib PUBLIC gdslib)
 
 #Compile test
-add_executable(test EXCLUDE_FROM_ALL "./test/main.c")
-
-target_link_libraries(test PRIVATE gecslib)
+option(GECS_BUILD_TEST "Build the test" ON)
+if(GECS_BUILD_TEST)
+    add_executable(gecs_test "test/main.c")
+    target_link_libraries(gecs_test PRIVATE gecslib)
+endif()
