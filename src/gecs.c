@@ -667,11 +667,16 @@ GECSSnapshot GECS_MakeSnapshotFromDisk(const char* filePath) {
 	DyArrayDeserialize(file, &snapshotToMake.IDsFreeList);
 	SparseSetDeserialize(file, &snapshotToMake.entitySparseSet);
 
-	DyArrayCreate(&snapshotToMake.componentSparseSets, sizeof(struct SparseSet), 10);
+	//Do dyarray manually
+	fread(&snapshotToMake.componentSparseSets.bufCapacity, 1, sizeof(size_t), file);
+	fread(&snapshotToMake.componentSparseSets.elementSize, 1, sizeof(size_t), file);
+	fread(&snapshotToMake.componentSparseSets.elementCount, 1, sizeof(size_t), file);
+
+	snapshotToMake.componentSparseSets.buf = malloc(snapshotToMake.componentSparseSets.bufCapacity);
+
 	for (size_t i = 0; i < snapshotToMake.componentSparseSets.elementCount; i++) {
-		struct SparseSet set;
-		SparseSetDeserialize(file, &set);
-		DyArrayAddElement(&snapshotToMake.componentSparseSets, &set);
+		struct SparseSet* set = DyArrayGetElement(&snapshotToMake.componentSparseSets, i);
+		SparseSetDeserialize(file, set);
 	}
 
 	fclose(file);
