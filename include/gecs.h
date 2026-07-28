@@ -124,7 +124,7 @@ bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath)
  * A valid snapshot must be freed after use with GECS_FreeSnapshot.
  * @return The loaded snapshot.
  */
-GECSSnapshot GECS_MakeSnapshotFromFisk(const char* filePath);
+GECSSnapshot GECS_MakeSnapshotFromDisk(const char* filePath);
 
 /*
  * @brief Directly saves the current state of the ECS in a file.
