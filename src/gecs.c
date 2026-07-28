@@ -692,9 +692,9 @@ bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath) {
 		return false;
 	}
 
-	FILE* file = fopen(filePath, "rb");
+	FILE* file = fopen(filePath, "wb");
 	if (!file) {
-		printf("GECS_MakeSnapshotFromDisk ERROR: could not open file at path %s.\n", filePath);
+		printf("GECS_MakeAndSaveSnapshotInDisk ERROR: could not open file at path %s.\n", filePath);
 		return false;
 	}
 
