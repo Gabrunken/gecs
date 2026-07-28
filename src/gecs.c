@@ -684,8 +684,77 @@ GECSSnapshot GECS_MakeSnapshotFromDisk(const char* filePath) {
 	return snapshotToMake;
 }
 
-bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath);
-bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath);
+bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath) {
+	GECS_EXPECT(_initialized);
+
+	if (!filePath || strlen(filePath) == 0) {
+		printf("GECS_MakeAndSaveSnapshotInDisk ERROR: filePath is not valid.\n");
+		return false;
+	}
+
+	FILE* file = fopen(filePath, "rb");
+	if (!file) {
+		printf("GECS_MakeSnapshotFromDisk ERROR: could not open file at path %s.\n", filePath);
+		return false;
+	}
+
+	DyArraySerialize((void*)&_currentIDsGeneration, file);
+	DyArraySerialize((void*)&_currentIDsFreeList, file);
+	SparseSetSerialize((void*)&_entities, file);
+
+	//Do dyarray manually
+	fwrite(&_registeredComponents.bufCapacity, 1, sizeof(size_t), file);
+	fwrite(&_registeredComponents.elementSize, 1, sizeof(size_t), file);
+	fwrite(&_registeredComponents.elementCount, 1, sizeof(size_t), file);
+
+	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
+		struct SparseSet* setToSerialize = DyArrayGetElement((void*)&_registeredComponents, i);
+		SparseSetSerialize(setToSerialize, file);
+	}
+
+	fclose(file);
+	return true;
+}
+
+bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath) {
+	GECS_EXPECT(_initialized);
+
+	if (!filePath || strlen(filePath) == 0) {
+		printf("GECS_MakeAndLoadSnapshotFromDisk ERROR: filePath is not valid.\n");
+		return false;
+	}
+
+	FILE* file = fopen(filePath, "rb");
+	if (!file) {
+		printf("GECS_MakeAndLoadSnapshotFromDisk ERROR: could not open file at path %s.\n", filePath);
+		return false;
+	}
+
+	DyArrayFree(&_currentIDsGeneration);
+	DyArrayFree(&_currentIDsFreeList);
+	SparseSetFree(&_entities);
+	DyArrayFree(&_registeredComponents);
+
+	DyArrayDeserialize(file, &_currentIDsGeneration);
+	DyArrayDeserialize(file, &_currentIDsFreeList);
+	SparseSetDeserialize(file, &_entities);
+
+	//Do dyarray manually
+	fread(&_registeredComponents.bufCapacity, 1, sizeof(size_t), file);
+	fread(&_registeredComponents.elementSize, 1, sizeof(size_t), file);
+	fread(&_registeredComponents.elementCount, 1, sizeof(size_t), file);
+
+	_registeredComponents.buf = malloc(_registeredComponents.bufCapacity);
+
+	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
+		struct SparseSet* set = DyArrayGetElement(&_registeredComponents, i);
+		SparseSetDeserialize(file, set);
+	}
+
+	fclose(file);
+
+	return true;
+}
 
 void GECS_FreeSnapshot(GECSSnapshot* snapshot) {
 	GECS_EXPECT(_initialized);
