@@ -198,7 +198,9 @@ void GECS_ExecuteSystem(SystemID systemID)
 			//Check if this entity has this component.
 			if (!SparseSetHasElement(componentSets[j], smallestSetElementID)) {archetypeFound = false; break;}
 			//Check if the component is active
-			//TODO if(...) {archetypeFound = false; break;}
+			struct SparseSet* componentActiveStateSet = DyArrayGetElement(&_entityComponentsActivationState, info->components[j] - 1);
+			bool* isComponentActive = SparseSetGetElement(componentActiveStateSet, smallestSetElementID);
+			if(*isComponentActive == false) {archetypeFound = false; break;}
 
 			components[j] = SparseSetGetElement(componentSets[j], smallestSetElementID);
 		}
