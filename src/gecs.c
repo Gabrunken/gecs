@@ -427,9 +427,9 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 
 	DyArrayAddElement(&_registeredComponents, &componentInfo);
 
-	dyarray componentActivationStateArray;
-	DyArrayCreate(&componentActivationStateArray, sizeof(bool), 100);
-	DyArrayAddElement(&_entityComponentsActivationState, &componentActivationStateArray);
+	struct SparseSet componentActivationStateSet;
+	SparseSetCreate(&componentActivationStateSet, sizeof(bool), 100);
+	DyArrayAddElement(&_entityComponentsActivationState, &componentActivationStateSet);
 
 	//The first ComponentTypeID starts from 1.
 	return _registeredComponents.elementCount;
