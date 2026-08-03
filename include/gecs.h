@@ -204,6 +204,47 @@ void GECS_DeleteEntity(EntityID entity);
 bool GECS_DoesEntityExist(EntityID entity);
 
 /*
+ * @brief Deactivate this entity, disabling any system from interacting with it.
+ * @param entity The entity ID to deactivate.
+ */
+void GECS_DeactivateEntity(EntityID entity);
+
+/*
+ * @brief Activate this entity, re-enabling the interaction with any system.
+ * @param entity The entity ID to activate.
+ */
+void GECS_ActivateEntity(EntityID entity);
+
+/*
+ * @brief Checks if an entity is active.
+ * @param entity The target entity.
+ * @return True is the entity is active, False otherwise.
+ */
+bool GECS_IsEntityActive(EntityID entity);
+
+/*
+ * @brief Deactivate this entity's specified component, disabling any system from interacting with it.
+ * @param entity The entity ID to deactivate.
+ * @param componentTypeID The target entity's component id.
+ */
+void GECS_DeactivateEntityComponent(EntityID entity, ComponentTypeID componentTypeID);
+
+/*
+ * @brief Activate this entity's specified component, re-enabling the interaction with any system.
+ * @param entity The entity ID to activate.
+ * @param componentTypeID The target entity's component id.
+ */
+void GECS_ActivateEntityComponent(EntityID entity, ComponentTypeID componentTypeID);
+
+/*
+ * @brief Checks if an entity's specified component is active.
+ * @param entity The target entity.
+ * @param componentTypeID The target entity's component id.
+ * @return True is the entity is active, False otherwise.
+ */
+bool GECS_IsEntityComponentActive(EntityID entity, ComponentTypeID componentTypeID);
+
+/*
  * @brief Attach a registered component to an existing entity.
  * You cannot attach the same component type to the same entity more than once.
  * @param componentData An allcated buffer long as the component type's size.

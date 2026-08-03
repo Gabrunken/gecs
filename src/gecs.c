@@ -47,6 +47,20 @@ static struct SparseSet _entities;
 static dyarray _currentIDsGeneration;
 static dyarray _currentIDsFreeList;
 
+//Entity and components activation state
+/*
+ * This one simply contains bools, and its indexed by using entity IDs - 1.
+ * Everytime an entity is created, this dyarray adds an element to itself only
+ * if the id is a new id and not picked from the freelist, otherwise it resets the
+ * freelist's picked id to be in an active state.
+ */
+static dyarray _entityActivationState;
+
+/*
+ *
+ */
+static dyarray _entityComponentsActivationState;
+
 static bool _initialized;
 
 #define GECS_EXPECT(condition, ...)\
@@ -74,6 +88,7 @@ void GECS_Init()
 
 	GECS_EXPECT(DyArrayCreate(&_registeredComponents, sizeof(_RegisteredComponent), 10));
 	GECS_EXPECT(DyArrayCreate(&_registeredSystems, sizeof(_SystemInfo), 10));
+	GECS_EXPECT(DyArrayCreate(&_entityActivationState, sizeof(bool), 100));
 
 	_initialized = true;
 }
@@ -168,19 +183,69 @@ void GECS_ExecuteSystem(SystemID systemID)
 	{
 		bool archetypeFound = true;
 
-		//Find matching components
-		size_t smallestSetElementID = SparseSetGetIDFromPhysicalIndex(smallestSet, i);
+		//Find matching components.
+		size_t smallestSetElementID = SparseSetGetIDFromPhysicalIndex(smallestSet, i); //This is the entity ID of this smallest set's component parent entity.
+		//Check if the whole entity is active or not
+		/* Check manually since the public function also requires a gen, and we don't need it, we know the entity exists. */
+		bool* isEntityActive = DyArrayGetElement(&_entityActivationState, smallestSetElementID - 1);
+		if(*isEntityActive == false) {continue;}
+
 		for (uint8_t j = 0; j < info->componentCount; j++)
 		{
+			//Check if this entity has this component.
 			if (!SparseSetHasElement(componentSets[j], smallestSetElementID)) {archetypeFound = false; break;}
+			//Check if the component is active
+			//TODO if(...) {archetypeFound = false; break;}
+
 			components[j] = SparseSetGetElement(componentSets[j], smallestSetElementID);
 		}
 
+		//The needed component set for this system has not been found in this entity.
 		if (!archetypeFound) continue;
 
 		size_t gen = *(size_t*)DyArrayGetElement(&_currentIDsGeneration, smallestSetElementID - 1);
+		//Call the user-defined system's routine.
 		info->callback((EntityID){smallestSetElementID, gen}, components);
 	}
+}
+
+void GECS_DeactivateEntity(EntityID entity)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!GECS_DoesEntityExist(entity)) {
+		printf("GECS_DeactivateEntity ERROR: passed entity does not exist.\n");
+		return;
+	}
+
+	bool* activationState = DyArrayGetElement(&_entityActivationState, entity.id - 1);
+	*activationState = false;
+}
+
+void GECS_ActivateEntity(EntityID entity)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!GECS_DoesEntityExist(entity)) {
+		printf("GECS_ActivateEntity ERROR: passed entity does not exist.\n");
+		return;
+	}
+
+	bool* activationState = DyArrayGetElement(&_entityActivationState, entity.id - 1);
+	*activationState = true;
+}
+
+bool GECS_IsEntityActive(EntityID entity)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!GECS_DoesEntityExist(entity)) {
+		printf("GECS_IsEntityActive ERROR: passed entity does not exist.\n");
+		return false;
+	}
+
+	bool* activationState = DyArrayGetElement(&_entityActivationState, entity.id - 1);
+	return *activationState;
 }
 
 bool _GECS_DoesComponentTypeExist(ComponentTypeID componentTypeID)
@@ -329,6 +394,8 @@ static EntityID _GECS_GetNewID()
 		currentGen++;
 
 		DyArraySetElement(&_currentIDsGeneration, freeIDIdx, &currentGen);
+		bool* activationState = DyArrayGetElement(&_entityActivationState, freeIDIdx /*Correct indexing since it represents entity ID - 1*/);
+		*activationState = true; //Reactivate this entity in case it had been deactivated before deletion.
 
 		id.id = freeIDIdx + 1;
 		id.gen = currentGen;
@@ -342,6 +409,7 @@ static EntityID _GECS_GetNewID()
 	id.gen = 1;
 
 	DyArrayAddElement(&_currentIDsGeneration, &id.gen);
+	DyArrayAddElement(&_entityActivationState, &(bool){true});
 
 	return id;
 }
@@ -516,6 +584,8 @@ void GECS_CleanUp()
 
 	DyArrayFree(&_currentIDsGeneration);
 	DyArrayFree(&_currentIDsFreeList);
+
+	DyArrayFree(&_entityActivationState);
 
 	SparseSetFree(&_entities);
 
