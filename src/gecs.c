@@ -57,7 +57,9 @@ static dyarray _currentIDsFreeList;
 static dyarray _entityActivationState;
 
 /*
- *
+ * This one contains a SparseSet for each component type, like _registeredComponents,
+ * only that the value inside the SparseSets are bools.
+ * SparseSets use standard ID indexing with entity IDs.
  */
 static dyarray _entityComponentsActivationState;
 
@@ -89,6 +91,7 @@ void GECS_Init()
 	GECS_EXPECT(DyArrayCreate(&_registeredComponents, sizeof(_RegisteredComponent), 10));
 	GECS_EXPECT(DyArrayCreate(&_registeredSystems, sizeof(_SystemInfo), 10));
 	GECS_EXPECT(DyArrayCreate(&_entityActivationState, sizeof(bool), 100));
+	GECS_EXPECT(DyArrayCreate(&_entityComponentsActivationState, sizeof(struct SparseSet), 10));
 
 	_initialized = true;
 }
@@ -248,6 +251,72 @@ bool GECS_IsEntityActive(EntityID entity)
 	return *activationState;
 }
 
+void GECS_DeactivateEntityComponent(EntityID entity, ComponentTypeID componentTypeID)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!GECS_DoesEntityExist(entity)) {
+		printf("GECS_DeactivateEntityComponent ERROR: entity does not exist.\n");
+		return;
+	}
+
+	struct SparseSet* activeStateSet = DyArrayGetElement(&_entityComponentsActivationState, componentTypeID - 1);
+	bool* activeState = SparseSetGetElement(activeStateSet, entity.id);
+	if (!activeState) {
+		printf("GECS_DeactivateEntityComponent ERROR: entity of id %zu and generation %zu does not have any component of type id %d.\n",
+			entity.id,
+			entity.gen,
+			componentTypeID
+		);
+	}
+
+	*activeState = false;
+}
+
+void GECS_ActivateEntityComponent(EntityID entity, ComponentTypeID componentTypeID)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!GECS_DoesEntityExist(entity)) {
+		printf("GECS_ActivateEntityComponent ERROR: entity does not exist.\n");
+		return;
+	}
+
+	struct SparseSet* activeStateSet = DyArrayGetElement(&_entityComponentsActivationState, componentTypeID - 1);
+	bool* activeState = SparseSetGetElement(activeStateSet, entity.id);
+	if (!activeState) {
+		printf("GECS_ActivateEntityComponent ERROR: entity of id %zu and generation %zu does not have any component of type id %d.\n",
+			entity.id,
+			entity.gen,
+			componentTypeID
+		);
+	}
+
+	*activeState = true;
+}
+
+bool GECS_IsEntityComponentActive(EntityID entity, ComponentTypeID componentTypeID)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!GECS_DoesEntityExist(entity)) {
+		printf("GECS_ActivateEntityComponent ERROR: entity does not exist.\n");
+		return false;
+	}
+
+	struct SparseSet* activeStateSet = DyArrayGetElement(&_entityComponentsActivationState, componentTypeID - 1);
+	bool* activeState = SparseSetGetElement(activeStateSet, entity.id);
+	if (!activeState) {
+		printf("GECS_ActivateEntityComponent ERROR: entity of id %zu and generation %zu does not have any component of type id %d.\n",
+			entity.id,
+			entity.gen,
+			componentTypeID
+		);
+	}
+
+	return *activeState;
+}
+
 bool _GECS_DoesComponentTypeExist(ComponentTypeID componentTypeID)
 {
 	GECS_EXPECT(_initialized);
@@ -357,6 +426,10 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 	componentInfo.set = set;
 
 	DyArrayAddElement(&_registeredComponents, &componentInfo);
+
+	dyarray componentActivationStateArray;
+	DyArrayCreate(&componentActivationStateArray, sizeof(bool), 100);
+	DyArrayAddElement(&_entityComponentsActivationState, &componentActivationStateArray);
 
 	//The first ComponentTypeID starts from 1.
 	return _registeredComponents.elementCount;
@@ -533,6 +606,9 @@ void GECS_AttachComponent(EntityID entity, ComponentTypeID componentTypeID, void
 	entityInfo->componentsPresence[entityInfo->componentCount] = componentTypeID;
 	entityInfo->componentIDToPresenceIdx[componentTypeID - 1] = entityInfo->componentCount;
 	entityInfo->componentCount++;
+
+	struct SparseSet* componentActiveStateSet = DyArrayGetElement(&_entityComponentsActivationState, componentTypeID - 1);
+	SparseSetAddElement(componentActiveStateSet, entity.id, &(bool){true});
 }
 
 void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID)
@@ -566,6 +642,9 @@ void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID)
 	entityInfo->componentsPresence[targetIdx] = entityInfo->componentsPresence[entityInfo->componentCount - 1];
 	entityInfo->componentIDToPresenceIdx[componentTypeID - 1] = 255; /* Invalid index, since in the system there can only be no more than 255 components */
 	entityInfo->componentCount--;
+
+	struct SparseSet* componentActiveStateSet = DyArrayGetElement(&_entityComponentsActivationState, componentTypeID - 1);
+	SparseSetRemoveElement(componentActiveStateSet, entity.id);
 }
 
 void GECS_CleanUp()
@@ -585,9 +664,10 @@ void GECS_CleanUp()
 	DyArrayFree(&_currentIDsGeneration);
 	DyArrayFree(&_currentIDsFreeList);
 
-	DyArrayFree(&_entityActivationState);
-
 	SparseSetFree(&_entities);
+
+	DyArrayFree(&_entityActivationState);
+	DyArrayFree(&_entityComponentsActivationState);
 
 	_initialized = false;
 }
@@ -612,10 +692,19 @@ GECSSnapshot GECS_MakeSnapshot() {
 
 	GECSSnapshot snapshot = {0};
 
+	/* =====_currentIDsGeneration -> snapshot===== */
 	DyArrayClone(&_currentIDsGeneration, &snapshot.IDsGeneration);
-	DyArrayClone(&_currentIDsFreeList, &snapshot.IDsFreeList);
-	SparseSetClone(&_entities, &snapshot.entitySparseSet);
+	/* ========== */
 
+	/* =====_currentIDsFreeList -> snapshot===== */
+	DyArrayClone(&_currentIDsFreeList, &snapshot.IDsFreeList);
+	/* ========== */
+
+	/* =====_entities -> snapshot===== */
+	SparseSetClone(&_entities, &snapshot.entitySparseSet);
+	/* ========== */
+
+	/* =====_registeredComponents -> snapshot===== */
 	DyArrayCreate(&snapshot.componentSparseSets, sizeof(struct SparseSet), 10); //I create it manually because i don't need the ComponentTypeInfo
 	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
 		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
@@ -625,8 +714,22 @@ GECSSnapshot GECS_MakeSnapshot() {
 
 		SparseSetClone(&registeredComponent->set, setToClone); //Do a deep copy
 	}
+	/* ========== */
 
+	/* =====_entityActivationState -> snapshot===== */
 	DyArrayClone(&_entityActivationState, &snapshot.entityActivationState);
+	/* ========== */
+
+	/* =====_entityComponentsActivationState -> snapshot===== */
+	DyArrayCreate(&snapshot.entityComponentsActivationState, sizeof(dyarray), 10);
+	for (size_t i = 0; i < _entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* originalSet = DyArrayGetElement(&_entityComponentsActivationState, i);
+		struct SparseSet newSet = {0};
+		SparseSetClone(originalSet, &newSet);
+
+		DyArrayAddElement(&snapshot.entityComponentsActivationState, &newSet);
+	}
+	/* ========== */
 
 	return snapshot;
 }
@@ -640,29 +743,86 @@ void GECS_LoadSnapshot(const GECSSnapshot* snapshot) {
 	}
 
 	//First free our current structures
-	DyArrayFree(&_currentIDsGeneration);
-	DyArrayFree(&_currentIDsFreeList);
-	SparseSetFree(&_entities);
 
+	/* ===== free _currentIDsGeneration ===== */
+	DyArrayFree(&_currentIDsGeneration);
+	/* ========== */
+
+	/* ===== free _currentIDsFreeList ===== */
+	DyArrayFree(&_currentIDsFreeList);
+	/* ========== */
+
+	/* ===== free _entities ===== */
+	SparseSetFree(&_entities);
+	/* ========== */
+
+	/* ===== free _registeredComponents ===== */
 	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
 		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
 		SparseSetFree(&registeredComponent->set);
 	}
 
+	/*
+	 * I COULD technically not free this,
+	 * since component types must be compatible,
+	 * i expect the ones in the snapshot to be the same as this one,
+	 * not needing to reallocate it.
+	 */
+	//DyArrayFree(&_registeredComponents);
+	/*
+	 * I won't free it, also because i'm not serializing the registered component's metadata,
+	 * so if i WANT to free it, i must serialize the whole RegisteredComponent struct, and read it.
+	 */
+	/* ========== */
+
+	/* ===== free _entityActivationState ===== */
 	DyArrayFree(&_entityActivationState);
+	/* ========== */
+
+	/* ===== free _entityComponentsActivationState ===== */
+	for (size_t i = 0; i < _entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* set = DyArrayGetElement(&_entityComponentsActivationState, i);
+		SparseSetFree(set);
+	}
+
+	DyArrayFree(&_entityComponentsActivationState);
+	/* ========== */
 
 	//Now let's clone the ones in the snapshot to load them in the current system.
+	/* ===== snapshot -> _currentIDsGeneration ===== */
 	DyArrayClone((void*)&snapshot->IDsGeneration, &_currentIDsGeneration);
-	DyArrayClone((void*)&snapshot->IDsFreeList, &_currentIDsFreeList);
-	SparseSetClone((void*)&snapshot->entitySparseSet, &_entities);
+	/* ========== */
 
+	/* ===== snapshot -> _currentIDsFreeList ===== */
+	DyArrayClone((void*)&snapshot->IDsFreeList, &_currentIDsFreeList);
+	/* ========== */
+
+	/* ===== snapshot -> _entities ===== */
+	SparseSetClone((void*)&snapshot->entitySparseSet, &_entities);
+	/* ========== */
+
+	/* ===== snapshot -> _registeredComponents ===== */
 	for (size_t i = 0; i < snapshot->componentSparseSets.elementCount; i++) {
 		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
 		struct SparseSet* setToClone = DyArrayGetElement((void*)&snapshot->componentSparseSets, i);
 		SparseSetClone(setToClone, &registeredComponent->set);
 	}
+	/* ========== */
 
+	/* ===== snapshot -> _entityActivationState ===== */
 	DyArrayClone((void*)&snapshot->entityActivationState, &_entityActivationState);
+	/* ========== */
+
+	/* ===== snapshot -> _entityComponentsActivationState ===== */
+	DyArrayCreate(&_entityComponentsActivationState, sizeof(dyarray), 10);
+	for (size_t i = 0; i < snapshot->entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* originalSet = DyArrayGetElement((void*)&snapshot->entityComponentsActivationState, i);
+		struct SparseSet newSet = {0};
+		SparseSetClone(originalSet, &newSet);
+
+		DyArrayAddElement(&_entityComponentsActivationState, &newSet);
+	}
+	/* ========== */
 }
 
 bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath) {
@@ -695,6 +855,7 @@ bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath)
 	    struct SparseSet entitySparseSet;
 	    dyarray componentSparseSets; //Contains only SparseSets, not _RegisteredComponent data
 		dyarray entityActivationState;
+	    dyarray entityComponentsActivationState; //Contains dyarrays, containing bools themselves
 	} GECSSnapshot;
 
 	DyArraySerialize((void*)&snapshot->IDsGeneration, file);
@@ -712,6 +873,15 @@ bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath)
 	}
 
 	DyArraySerialize((void*)&snapshot->entityActivationState, file);
+
+	fwrite(&snapshot->entityComponentsActivationState.bufCapacity, 1, sizeof(size_t), file);
+	fwrite(&snapshot->entityComponentsActivationState.elementSize, 1, sizeof(size_t), file);
+	fwrite(&snapshot->entityComponentsActivationState.elementCount, 1, sizeof(size_t), file);
+
+	for (size_t i = 0; i < snapshot->entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* setToSerialize = DyArrayGetElement((void*)&snapshot->entityComponentsActivationState, i);
+		SparseSetSerialize(setToSerialize, file);
+	}
 
 	fclose(file);
 
@@ -742,6 +912,8 @@ GECSSnapshot GECS_MakeSnapshotFromDisk(const char* filePath) {
 	    dyarray IDsFreeList;
 	    struct SparseSet entitySparseSet;
 	    dyarray componentSparseSets; //Contains only SparseSets, not _RegisteredComponent data
+		dyarray entityActivationState;
+	    dyarray entityComponentsActivationState; //Contains dyarrays, containing bools themselves
 	} GECSSnapshot;
 
 	DyArrayDeserialize(file, &snapshotToMake.IDsGeneration);
@@ -761,6 +933,17 @@ GECSSnapshot GECS_MakeSnapshotFromDisk(const char* filePath) {
 	}
 
 	DyArrayDeserialize(file, &snapshotToMake.entityActivationState);
+
+	fread(&snapshotToMake.entityComponentsActivationState.bufCapacity, 1, sizeof(size_t), file);
+	fread(&snapshotToMake.entityComponentsActivationState.elementSize, 1, sizeof(size_t), file);
+	fread(&snapshotToMake.entityComponentsActivationState.elementCount, 1, sizeof(size_t), file);
+
+	snapshotToMake.entityComponentsActivationState.buf = malloc(snapshotToMake.entityComponentsActivationState.bufCapacity);
+
+	for (size_t i = 0; i < snapshotToMake.entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* setToDeserialize = DyArrayGetElement((void*)&snapshotToMake.entityComponentsActivationState, i);
+		SparseSetDeserialize(file, setToDeserialize);
+	}
 
 	fclose(file);
 
@@ -796,6 +979,15 @@ bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath) {
 	}
 
 	DyArraySerialize((void*)&_entityActivationState, file);
+
+	fwrite(&_entityComponentsActivationState.bufCapacity, 1, sizeof(size_t), file);
+	fwrite(&_entityComponentsActivationState.elementSize, 1, sizeof(size_t), file);
+	fwrite(&_entityComponentsActivationState.elementCount, 1, sizeof(size_t), file);
+
+	for (size_t i = 0; i < _entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* setToSerialize = DyArrayGetElement((void*)&_entityComponentsActivationState, i);
+		SparseSetSerialize(setToSerialize, file);
+	}
 
 	fclose(file);
 	return true;
@@ -838,6 +1030,17 @@ bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath) {
 
 	DyArrayDeserialize(file, &_entityActivationState);
 
+	fread(&_entityComponentsActivationState.bufCapacity, 1, sizeof(size_t), file);
+	fread(&_entityComponentsActivationState.elementSize, 1, sizeof(size_t), file);
+	fread(&_entityComponentsActivationState.elementCount, 1, sizeof(size_t), file);
+
+	_entityComponentsActivationState.buf = malloc(_entityComponentsActivationState.bufCapacity);
+
+	for (size_t i = 0; i < _entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* setToDeserialize = DyArrayGetElement((void*)&_entityComponentsActivationState, i);
+		SparseSetDeserialize(file, setToDeserialize);
+	}
+
 	fclose(file);
 
 	return true;
@@ -862,6 +1065,15 @@ void GECS_FreeSnapshot(GECSSnapshot* snapshot) {
 	}
 
 	DyArrayFree(&snapshot->componentSparseSets);
+
+	DyArrayFree(&snapshot->entityActivationState);
+
+	for (size_t i = 0; i < snapshot->entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* setToFree = DyArrayGetElement(&snapshot->entityComponentsActivationState, i);
+		SparseSetFree(setToFree);
+	}
+
+	DyArrayFree(&snapshot->entityComponentsActivationState);
 }
 
 bool GECS_IsSnapshotValid(const GECSSnapshot* snapshot) {

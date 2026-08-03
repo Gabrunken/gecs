@@ -68,6 +68,7 @@ typedef struct
     struct SparseSet entitySparseSet;
     dyarray componentSparseSets; //Contains only SparseSets, not _RegisteredComponent data
     dyarray entityActivationState;
+    dyarray entityComponentsActivationState; //Contains sparsesets, containing bools themselves
 } GECSSnapshot;
 
 /*
@@ -267,6 +268,7 @@ void* GECS_GetComponent(EntityID entity, ComponentTypeID componentTypeID);
 /*
  * @brief Fast way to know if an entity has a component
  */
+//Not sure if i want this, might as well use GetComponent.
 //bool GECS_DoesEntityHaveComponent(EntityID entity, ComponentTypeID componentTypeID);
 
 /*
