@@ -608,6 +608,8 @@ GECSSnapshot GECS_MakeSnapshot() {
 	 * Also copy the free list and gen list
 	 */
 
+	//Always take GECSSnapshot struct formatting as reference
+
 	GECSSnapshot snapshot = {0};
 
 	DyArrayClone(&_currentIDsGeneration, &snapshot.IDsGeneration);
@@ -623,6 +625,8 @@ GECSSnapshot GECS_MakeSnapshot() {
 
 		SparseSetClone(&registeredComponent->set, setToClone); //Do a deep copy
 	}
+
+	DyArrayClone(&_entityActivationState, &snapshot.entityActivationState);
 
 	return snapshot;
 }
@@ -645,6 +649,8 @@ void GECS_LoadSnapshot(const GECSSnapshot* snapshot) {
 		SparseSetFree(&registeredComponent->set);
 	}
 
+	DyArrayFree(&_entityActivationState);
+
 	//Now let's clone the ones in the snapshot to load them in the current system.
 	DyArrayClone((void*)&snapshot->IDsGeneration, &_currentIDsGeneration);
 	DyArrayClone((void*)&snapshot->IDsFreeList, &_currentIDsFreeList);
@@ -655,6 +661,8 @@ void GECS_LoadSnapshot(const GECSSnapshot* snapshot) {
 		struct SparseSet* setToClone = DyArrayGetElement((void*)&snapshot->componentSparseSets, i);
 		SparseSetClone(setToClone, &registeredComponent->set);
 	}
+
+	DyArrayClone((void*)&snapshot->entityActivationState, &_entityActivationState);
 }
 
 bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath) {
@@ -686,6 +694,7 @@ bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath)
 	    dyarray IDsFreeList;
 	    struct SparseSet entitySparseSet;
 	    dyarray componentSparseSets; //Contains only SparseSets, not _RegisteredComponent data
+		dyarray entityActivationState;
 	} GECSSnapshot;
 
 	DyArraySerialize((void*)&snapshot->IDsGeneration, file);
@@ -701,6 +710,8 @@ bool GECS_SaveSnapshotInDisk(const GECSSnapshot* snapshot, const char* filePath)
 		struct SparseSet* setToSerialize = DyArrayGetElement((void*)&snapshot->componentSparseSets, i);
 		SparseSetSerialize(setToSerialize, file);
 	}
+
+	DyArraySerialize((void*)&snapshot->entityActivationState, file);
 
 	fclose(file);
 
@@ -749,6 +760,8 @@ GECSSnapshot GECS_MakeSnapshotFromDisk(const char* filePath) {
 		SparseSetDeserialize(file, set);
 	}
 
+	DyArrayDeserialize(file, &snapshotToMake.entityActivationState);
+
 	fclose(file);
 
 	return snapshotToMake;
@@ -781,6 +794,8 @@ bool GECS_MakeAndSaveSnapshotInDisk(const char* filePath) {
 		struct SparseSet* setToSerialize = DyArrayGetElement((void*)&_registeredComponents, i);
 		SparseSetSerialize(setToSerialize, file);
 	}
+
+	DyArraySerialize((void*)&_entityActivationState, file);
 
 	fclose(file);
 	return true;
@@ -820,6 +835,8 @@ bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath) {
 		struct SparseSet* set = DyArrayGetElement(&_registeredComponents, i);
 		SparseSetDeserialize(file, set);
 	}
+
+	DyArrayDeserialize(file, &_entityActivationState);
 
 	fclose(file);
 
