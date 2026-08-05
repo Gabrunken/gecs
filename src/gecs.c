@@ -669,6 +669,12 @@ void GECS_CleanUp()
 	SparseSetFree(&_entities);
 
 	DyArrayFree(&_entityActivationState);
+
+	for (size_t i = 0; i < _entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* set = DyArrayGetElement(&_entityComponentsActivationState, i);
+		SparseSetFree(set);
+	}
+
 	DyArrayFree(&_entityComponentsActivationState);
 
 	_initialized = false;
@@ -1086,4 +1092,31 @@ bool GECS_IsSnapshotValid(const GECSSnapshot* snapshot) {
 		return true;
 
 	return false;
+}
+
+void GECS_ClearECS()
+{
+	GECS_EXPECT(_initialized);
+
+	/*
+	 * Clear everything but not freeing the allocations, i'd have to re-create everything, for now i'll leave it like this
+     * i'll fix it in the future.
+	 */
+
+	DyArrayClear(&_currentIDsGeneration);
+	DyArrayClear(&_currentIDsFreeList);
+
+	SparseSetClear(&_entities);
+
+	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
+		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
+		SparseSetClear(&registeredComponent->set);
+	}
+
+	DyArrayClear(&_entityActivationState);
+
+	for (size_t i = 0; i < _entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* set = DyArrayGetElement(&_entityComponentsActivationState, i);
+		SparseSetClear(set);
+	}
 }

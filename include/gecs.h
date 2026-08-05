@@ -271,6 +271,8 @@ void* GECS_GetComponent(EntityID entity, ComponentTypeID componentTypeID);
 //Not sure if i want this, might as well use GetComponent.
 //bool GECS_DoesEntityHaveComponent(EntityID entity, ComponentTypeID componentTypeID);
 
+void GECS_ClearECS();
+
 /*
  * @brief Retrieves a specified entity's info.
  * @param entity The target entity's ID.
