@@ -147,6 +147,51 @@ SystemID GECS_RegisterSystem(void (*callback)(EntityID, void**), int componentCo
 	return _registeredSystems.elementCount;
 }
 
+SystemID GECS_vRegisterSystem(void (*callback)(EntityID, void**), int componentCount, va_list args)
+{
+	GECS_EXPECT(_initialized);
+	if (!callback)
+	{
+		printf("GECS_vRegisterSystem ERROR: callback is NULL.\n");
+		return GECS_INVALID_SYSTEM_ID;
+	}
+
+	if (componentCount == 0)
+	{
+		printf("GECS_vRegisterSystem ERROR: componentCount is 0.\n");
+		return GECS_INVALID_SYSTEM_ID;
+	}
+
+	if (componentCount > GECS_MAX_SYSTEM_COMPONENTS)
+	{
+		printf("GECS_vRegisterSystem ERROR: componentCount is above the maximum allowed (%d).\n", GECS_MAX_SYSTEM_COMPONENTS);
+		return GECS_INVALID_SYSTEM_ID;
+	}
+
+	_SystemInfo info = {0};
+	info.componentCount = componentCount;
+	info.callback = callback;
+
+	ComponentTypeID componentTypeID;
+	for (int i = 0; i < componentCount; i++)
+	{
+		int notSafeID = va_arg(args, int); //Variadic arguments are always promoted to int, even if smaller
+		//Check if the user fucked up, by providing an invalid id
+		if (!(notSafeID > 0 && notSafeID <= _registeredComponents.elementCount)){
+			printf("GECS_vRegisterSystem ERROR: the input ID %d is not a valid component type.\n", notSafeID);
+			return GECS_INVALID_SYSTEM_ID;
+		}
+
+		componentTypeID = notSafeID; //Now safe lol
+
+		info.components[i] = componentTypeID;
+	}
+
+	DyArrayAddElement(&_registeredSystems, &info);
+
+	return _registeredSystems.elementCount;
+}
+
 void GECS_ExecuteSystem(SystemID systemID)
 {
 	GECS_EXPECT(_initialized);
@@ -422,6 +467,63 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 	}
 
 	va_end(args);
+
+	struct SparseSet set = {0};
+	SparseSetCreate(&set, 0, size);
+	componentInfo.set = set;
+
+	DyArrayAddElement(&_registeredComponents, &componentInfo);
+
+	struct SparseSet componentActivationStateSet;
+	SparseSetCreate(&componentActivationStateSet, sizeof(bool), 100);
+	DyArrayAddElement(&_entityComponentsActivationState, &componentActivationStateSet);
+
+	//The first ComponentTypeID starts from 1.
+	return _registeredComponents.elementCount;
+}
+
+ComponentTypeID GECS_vRegisterComponent(size_t size, const char* name, uint32_t fieldCount, va_list args)
+{
+	GECS_EXPECT(_initialized);
+
+	if (_registeredComponents.elementCount == GECS_MAX_REGISTERED_COMPONENTS){
+		printf("GECS_vRegisterComponent ERROR: max registered components reached (%d).\n", GECS_MAX_REGISTERED_COMPONENTS);
+		return GECS_INVALID_COMPONENT_TYPE_ID;
+	}
+
+	if (!size){
+		printf("GECS_vRegisterComponent ERROR: size is 0.\n");
+		return GECS_INVALID_COMPONENT_TYPE_ID;
+	}
+
+	if (!name){
+		printf("GECS_vRegisterComponent ERROR: name is NULL.\n");
+		return GECS_INVALID_COMPONENT_TYPE_ID;
+	}
+
+	if (fieldCount > GECS_MAX_COMPONENT_FIELDS){
+		printf("GECS_vRegisterComponent ERROR: fieldCount is above the limit (%d).\n", GECS_MAX_COMPONENT_FIELDS);
+		return GECS_INVALID_COMPONENT_TYPE_ID;
+	}
+
+	_RegisteredComponent componentInfo = {0};
+	componentInfo.info.fieldCount = fieldCount;
+	strncpy(componentInfo.info.name, name, GECS_MAX_COMPONENT_NAME_LENGTH);
+
+	//Iterate for each field
+	for (uint32_t i = 0; i < fieldCount; i++)
+	{
+		uint32_t fieldType = va_arg(args, uint32_t);
+		const char* fieldName = va_arg(args, char*);
+		if (!fieldName){
+			printf("GECS_vRegisterComponent ERROR: a variadic argument is NULL.\n");
+			return GECS_INVALID_COMPONENT_TYPE_ID;
+		}
+
+		componentInfo.info.componentFieldsInfo[i].type = fieldType;
+
+		strncpy(componentInfo.info.componentFieldsInfo[i].name, fieldName, GECS_MAX_COMPONENT_FIELD_NAME_LENGTH);
+	}
 
 	struct SparseSet set = {0};
 	SparseSetCreate(&set, 0, size);

@@ -88,6 +88,11 @@ void GECS_Init();
 SystemID GECS_RegisterSystem(void (*callback)(EntityID, void**), int componentCount, ...);
 
 /*
+ * Use only if you need to forward varadic arguments from another function.
+ */
+SystemID GECS_vRegisterSystem(void (*callback)(EntityID, void**), int componentCount, va_list args);
+
+/*
  * @brief Execute the callback defined by the system registration.
  * @param systemID The idendificator for the system to execute.
  */
@@ -109,6 +114,11 @@ void GECS_ExecuteSystem(SystemID systemID);
  * @return The unique id assigned to the newly registered component type.
  */
 ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t fieldCount, ...);
+
+/*
+ * Use only if you need to forward varadic arguments from another function.
+ */
+ComponentTypeID GECS_vRegisterComponent(size_t size, const char* name, uint32_t fieldCount, va_list args);
 
 /*
  * @brief Saves the current Entity-Component instance's state into a file.
