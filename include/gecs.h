@@ -271,6 +271,10 @@ void* GECS_GetComponent(EntityID entity, ComponentTypeID componentTypeID);
 //Not sure if i want this, might as well use GetComponent.
 //bool GECS_DoesEntityHaveComponent(EntityID entity, ComponentTypeID componentTypeID);
 
+/*
+ * @brief Empties the current ECS instance, removing any entity and component that it had saved.
+ * Also resets ID generation.
+ */
 void GECS_ClearECS();
 
 /*
