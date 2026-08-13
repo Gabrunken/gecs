@@ -47,6 +47,7 @@ typedef struct
 	ComponentFieldInfo componentFieldsInfo[GECS_MAX_COMPONENT_FIELDS];
 	char name[GECS_MAX_COMPONENT_NAME_LENGTH + 1];
 	uint32_t fieldCount;
+	uint32_t componentSize; //In bytes
 } ComponentTypeInfo;
 
 typedef struct
@@ -121,6 +122,15 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 ComponentTypeID GECS_vRegisterComponent(size_t size, const char* name, uint32_t fieldCount, va_list args);
 
 /*
+ * This function must be called at the end of each frame,
+ * to ensure that GECS correctly cleans up its internal
+ * command buffer, to then prepare for the next frame's execution.
+ *
+ * Call it after all systems have been executed.
+ */
+void GECS_ProcessFrameEnd();
+
+/*
  * @brief Saves the current Entity-Component instance's state into a file.
  * @param snapshot The loaded snapshot to save.
  * @param filePath a file path to the desired file destination.
@@ -169,9 +179,13 @@ GECSSnapshot GECS_MakeSnapshot();
 
 /*
  * @brief Load into GECS the passed snapshot.
- * IMPORTANT: snapshots may not be compatible with different instances of GECS;
+ * IMPORTANT 1: snapshots may not be compatible with different instances of GECS;
  * To successfully load a snapshot you must first assure that your ComponentTypes
  * match exactly the ones used in the passed snapshot, otherwise it will cause Undefined Behaviour.
+ * IMPORTANT 2: the passed pointer must not point to a stack allocated, system's routine object,
+ * because this function is actually queued, and executed and the end of the frame, not instantly.
+ * For that you must pass a pointer to an object foreign from a system's routine, that is still alive
+ * after.
  */
 void GECS_LoadSnapshot(const GECSSnapshot* snapshot);
 
