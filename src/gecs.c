@@ -150,6 +150,9 @@ void GECS_DeleteEntity(EntityID entity)
 	cmd.type = GECS_CMD_DELETE_ENTITY;
 	cmd.targetEntity = entity;
 
+	bool* livingState = DyArrayGetElement(&_entityLivingState, entity.id - 1);
+	*livingState = false; //dead
+
 	DyArrayAddElement(&_commandQueue, &cmd);
 }
 
@@ -177,6 +180,10 @@ void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID)
 	cmd.type = GECS_CMD_DETACH_COMPONENT;
 	cmd.targetEntity = entity;
 	cmd.targetComponent = componentTypeID;
+
+	struct SparseSet* livingStateSet = DyArrayGetElement(&_entityComponentsLivingState, componentTypeID - 1);
+	bool* state = SparseSetGetElement(livingStateSet, entity.id);
+	*state = false; //dead
 
 	DyArrayAddElement(&_commandQueue, &cmd);
 }
@@ -761,6 +768,8 @@ EntityID GECS_CreateEntity(const char *name)
 	return id;
 }
 
+void _GECS_DetachComponent_Instant(EntityID entity, ComponentTypeID componentTypeID);
+
 void _GECS_DeleteEntity_Instant(EntityID entity)
 {
 	GECS_EXPECT(_initialized);
@@ -777,7 +786,7 @@ void _GECS_DeleteEntity_Instant(EntityID entity)
 		ComponentTypeID target = entityInfo->componentsPresence[i];
 
 		_RegisteredComponent* componentInfo = DyArrayGetElement(&_registeredComponents, target - 1);
-		GECS_DetachComponent(entity, target); //Call the standard function since it does a proper cleanup instead of doing it manually.
+		_GECS_DetachComponent_Instant(entity, target); //Call the standard function since it does a proper cleanup instead of doing it manually.
 	}
 
 	//Add the removed id to the free list
