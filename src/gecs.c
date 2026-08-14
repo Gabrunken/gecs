@@ -731,8 +731,6 @@ EntityID GECS_CreateEntity(const char *name)
 	return id;
 }
 
-void _GECS_DetachComponent_Instant(EntityID entity, ComponentTypeID componentTypeID);
-
 void _GECS_DeleteEntity_Instant(EntityID entity)
 {
 	GECS_EXPECT(_initialized);
@@ -744,11 +742,10 @@ void _GECS_DeleteEntity_Instant(EntityID entity)
 
 	//First remove any components it had, by checking its metadata
 	EntityInfo* entityInfo = SparseSetGetElement(&_entities, entity.id);
-	for (uint8_t i = 0; i < entityInfo->componentCount; i++)
+	for (uint8_t i = entityInfo->componentCount; i >= 0; i--) //Iterate backwards since componentCount will decrease at each DetachComponent call.
 	{
 		ComponentTypeID target = entityInfo->componentsPresence[i];
 
-		_RegisteredComponent* componentInfo = DyArrayGetElement(&_registeredComponents, target - 1);
 		_GECS_DetachComponent_Instant(entity, target); //Call the standard function since it does a proper cleanup instead of doing it manually.
 	}
 
@@ -1082,6 +1079,8 @@ bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath)
 	cmd.payload.filePath = _strdup(filePath);
 
 	DyArrayAddElement(&_commandQueue, &cmd);
+
+	return true; //Should kinda not return true here... we didn't call the function yet.
 }
 
 void GECS_ClearECS()
