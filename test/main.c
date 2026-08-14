@@ -1,122 +1,119 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 #include "gecs.h"
 
-// --- STRUTTURE COMPONENTI ---
-typedef struct {
-    float x;
-    float y;
-} Position;
+#define MAX_ENTITIES 1000000 // 1 MILIONE di entità
+#define TEST_FRAMES 100      // Quanti frame simulare
 
-typedef struct {
-    int hp;
-} Health;
+// --- COMPONENTI ---
+typedef struct { float x, y; } Position;
+typedef struct { float dx, dy; } Velocity;
+typedef struct { int framesLeft; } LifeTime;
 
-typedef struct {
-    int timeToLive;
-} Bomb;
+ComponentTypeID COMP_POS;
+ComponentTypeID COMP_VEL;
+ComponentTypeID COMP_LIFE;
 
-// --- VARIABILI GLOBALI ---
-ComponentTypeID COMP_POSITION;
-ComponentTypeID COMP_HEALTH;
-ComponentTypeID COMP_BOMB;
-
-SystemID SYS_COMBAT;
-SystemID SYS_MOVEMENT;
-SystemID SYS_BOMB;
-
-// --- SISTEMA 1: COMBATTIMENTO E MORTE ---
-void CombatSystem(EntityID entity, void** components)
-{
-    Health* health = (Health*)components[0];
-
-    // Un colpo potentissimo da 20 HP
-    health->hp -= 20;
-    printf("[SYS_COMBAT] Entita' %zu colpita. HP rimasti: %d\n", entity.id, health->hp);
-
-    if (health->hp <= 0)
-    {
-        // L'utente chiama solo questa. L'engine fa il resto:
-        // 1. Accoda la distruzione fisica.
-        // 2. Disattiva logicamente l'entità per il resto del frame tramite il tuo buffer interno.
-        printf("  -> [! FATALITY !] L'entita' %zu e' morta! Chiamo GECS_DeleteEntity.\n", entity.id);
-        GECS_DeleteEntity(entity);
-    }
-    else if (health->hp == 20)
-    {
-        printf("  -> [! MUTAZIONE !] L'entita' %zu e' a 20 HP. Ordino l'aggiunta del componente BOMB!\n", entity.id);
-        Bomb newBomb = { 1 };
-        GECS_AttachComponent(entity, COMP_BOMB, &newBomb);
-    }
-}
-
-// --- SISTEMA 2: MOVIMENTO ---
+// --- SISTEMI ---
+// Sistema 1: Pura matematica intensiva per stressare la Cache e la CPU
 void MovementSystem(EntityID entity, void** components)
 {
     Position* pos = (Position*)components[0];
-    pos->x += 1.0f;
-    printf("[SYS_MOVEMENT] Entita' %zu si e' mossa a X: %.1f\n", entity.id, pos->x);
+    Velocity* vel = (Velocity*)components[1];
+
+    pos->x += vel->dx;
+    pos->y += vel->dy;
 }
 
-// --- SISTEMA 3: BOMBA ---
-void BombSystem(EntityID entity, void** components)
+// Sistema 2: Logica condizionale e stress del Command Buffer
+void LifeSystem(EntityID entity, void** components)
 {
-    Bomb* bomb = (Bomb*)components[0];
-    bomb->timeToLive -= 1;
+    LifeTime* life = (LifeTime*)components[0];
+    life->framesLeft--;
 
-    printf("[SYS_BOMB] Entita' %zu... Tic Toc... Manca %d\n", entity.id, bomb->timeToLive);
-
-    if (bomb->timeToLive <= 0)
+    if (life->framesLeft <= 0)
     {
-        printf("  -> [! CATACLISMA !] La bomba %zu e' esplosa! Chiamo GECS_ClearECS()!\n", entity.id);
-        GECS_ClearECS();
+        // Boom. Accodiamo la distruzione.
+        // L'entità viene disattivata logicamente all'istante (niente zombie).
+        GECS_DeleteEntity(entity);
     }
 }
 
-
-// --- MAIN ---
 int main()
 {
-    printf("--- INIZIALIZZAZIONE GECS ---\n");
+    printf("--- GECS MEGA STRESS TEST ---\n");
+    printf("Inizializzazione Engine...\n");
     GECS_Init();
 
-    COMP_POSITION = GECS_RegisterComponent(sizeof(Position), "Position", 2, 4, "x", 4, "y");
-    COMP_HEALTH   = GECS_RegisterComponent(sizeof(Health), "Health", 1, 1, "hp");
-    COMP_BOMB     = GECS_RegisterComponent(sizeof(Bomb), "Bomb", 1, 1, "timeToLive");
+    // 1. Registrazione (uso '4' per indicare ipotetici float/int a 4 byte)
+    COMP_POS  = GECS_RegisterComponent(sizeof(Position), "Position", 2, 4, "x", 4, "y");
+    COMP_VEL  = GECS_RegisterComponent(sizeof(Velocity), "Velocity", 2, 4, "dx", 4, "dy");
+    COMP_LIFE = GECS_RegisterComponent(sizeof(LifeTime), "LifeTime", 1, 4, "framesLeft");
 
-    SYS_COMBAT   = GECS_RegisterSystem(CombatSystem, 1, COMP_HEALTH);
-    SYS_MOVEMENT = GECS_RegisterSystem(MovementSystem, 1, COMP_POSITION);
-    SYS_BOMB     = GECS_RegisterSystem(BombSystem, 1, COMP_BOMB);
+    SystemID SYS_MOVE = GECS_RegisterSystem(MovementSystem, 2, COMP_POS, COMP_VEL);
+    SystemID SYS_LIFE = GECS_RegisterSystem(LifeSystem, 1, COMP_LIFE);
 
-    EntityID orco = GECS_CreateEntity("Orco");
-    Position posOrco = { 0.0f, 0.0f };
-    Health hpOrco = { 40 }; // Test in 2 frame
+    // 2. Spawn di Massa
+    printf("Allocazione di %d Entita' in corso (Attendi)...\n", MAX_ENTITIES);
 
-    GECS_AttachComponent(orco, COMP_POSITION, &posOrco);
-    GECS_AttachComponent(orco, COMP_HEALTH, &hpOrco);
-
-    printf("\n--- INIZIO GAME LOOP ---\n");
-
-    for (int frame = 1; frame <= 3; frame++)
+    srand(1337); // Seed fisso per avere risultati deterministici tra run diverse
+    for (int i = 0; i < MAX_ENTITIES; i++)
     {
-        printf("\n=== FRAME %d ===\n", frame);
+        EntityID e = GECS_CreateEntity("Particella");
 
-        GECS_ExecuteSystem(SYS_COMBAT);
-        GECS_ExecuteSystem(SYS_MOVEMENT);
-        GECS_ExecuteSystem(SYS_BOMB);
+        Position p = { (float)(rand() % 800), (float)(rand() % 600) };
+        Velocity v = { (float)(rand() % 10) / 10.0f, (float)(rand() % 10) / 10.0f };
+        LifeTime l = { (rand() % 50) + 10 }; // Vivono tra 10 e 60 frame!
 
-        printf(">>> Chiamo ProcessFrameEnd() per svuotare il Command Buffer e ripulire la RAM...\n");
+        // Attacchiamo subito prima del loop, niente command buffer qui.
+        GECS_AttachComponent(e, COMP_POS, &p);
+        GECS_AttachComponent(e, COMP_VEL, &v);
+        GECS_AttachComponent(e, COMP_LIFE, &l);
+    }
+    printf("Spawn completato. Inizio simulazione.\n\n");
+
+    // 3. Loop di Simulazione
+    double totalSystemsTime = 0.0;
+    double totalFlushTime = 0.0;
+
+    for (int frame = 1; frame <= TEST_FRAMES; frame++)
+    {
+        clock_t startFrame = clock();
+
+        // -- FASE 1: ESECUZIONE SISTEMI --
+        GECS_ExecuteSystem(SYS_MOVE);
+        GECS_ExecuteSystem(SYS_LIFE);
+
+        clock_t endSystems = clock();
+
+        // -- FASE 2: RISOLUZIONE COMMAND BUFFER --
         GECS_ProcessFrameEnd();
 
-        if (!GECS_DoesEntityExist(orco)) {
-            printf(">>> L'engine conferma: l'entita' non esiste piu' fisicamente. Loop terminato in sicurezza.\n");
-            break;
+        clock_t endFlush = clock();
+
+        // Calcolo tempi in millisecondi
+        double systemsMs = ((double)(endSystems - startFrame) / CLOCKS_PER_SEC) * 1000.0;
+        double flushMs   = ((double)(endFlush - endSystems) / CLOCKS_PER_SEC) * 1000.0;
+
+        totalSystemsTime += systemsMs;
+        totalFlushTime += flushMs;
+
+        // Stampiamo solo ogni 10 frame per non intasare la console e rallentare il test
+        if (frame % 10 == 0) {
+            printf("[Frame %03d] Sistemi: %.2f ms | CommandBuffer Flush: %.2f ms | Totale: %.2f ms\n",
+                   frame, systemsMs, flushMs, systemsMs + flushMs);
         }
     }
 
-    printf("\n--- CLEANUP GECS ---\n");
-    GECS_CleanUp();
+    printf("\n--- RISULTATI BENCHMARK (%d Frames) ---\n", TEST_FRAMES);
+    printf("Tempo MEDIO Sistemi: %.2f ms a frame\n", totalSystemsTime / TEST_FRAMES);
+    printf("Tempo MEDIO Flush:   %.2f ms a frame\n", totalFlushTime / TEST_FRAMES);
 
+    double avgTotalMs = (totalSystemsTime + totalFlushTime) / TEST_FRAMES;
+    printf("Tempo MEDIO Totale:  %.2f ms (Stima: %.0f FPS)\n", avgTotalMs, 1000.0 / avgTotalMs);
+
+    GECS_CleanUp();
     return 0;
 }

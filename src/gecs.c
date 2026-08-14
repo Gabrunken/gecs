@@ -81,6 +81,13 @@ static dyarray _entityComponentsLivingState;
 
 static dyarray _commandQueue;
 
+/*
+ * Are we inside a user's system's callback?
+ * If so each call that can be queued, must be queued.
+ * Otherwise, simply execute it instantly.
+ */
+static bool _isExecutingSystemCallback;
+
 static bool _initialized;
 
 #define GECS_EXPECT(condition, ...)\
@@ -95,6 +102,12 @@ do\
 } while (0)
 
 struct SparseSet* _GECS_GetComponentSparseSet(ComponentTypeID componentTypeID);
+void _GECS_DeleteEntity_Instant(EntityID entity);
+void _GECS_DetachComponent_Instant(EntityID entity, ComponentTypeID componentTypeID);
+void _GECS_AttachComponent_Instant(EntityID entity, ComponentTypeID componentTypeID, void* componentData);
+void _GECS_ClearECS_Instant();
+void _GECS_LoadSnapshot_Instant(const GECSSnapshot* snapshot);
+bool _GECS_MakeAndLoadSnapshotFromDisk_Instant(const char* filePath);
 
 typedef enum
 {
@@ -142,76 +155,6 @@ void GECS_Init()
 	GECS_EXPECT(DyArrayCreate(&_commandQueue, sizeof(GECSCommand), 100));
 
 	_initialized = true;
-}
-
-void GECS_DeleteEntity(EntityID entity)
-{
-	GECSCommand cmd = {0};
-	cmd.type = GECS_CMD_DELETE_ENTITY;
-	cmd.targetEntity = entity;
-
-	bool* livingState = DyArrayGetElement(&_entityLivingState, entity.id - 1);
-	*livingState = false; //dead
-
-	DyArrayAddElement(&_commandQueue, &cmd);
-}
-
-void GECS_AttachComponent(EntityID entity, ComponentTypeID componentTypeID, void* componentData)
-{
-	GECSCommand cmd = {0};
-	cmd.type = GECS_CMD_ATTACH_COMPONENT;
-	cmd.targetEntity = entity;
-	cmd.targetComponent = componentTypeID;
-	const ComponentTypeInfo* componentInfo = GECS_GetComponentTypeInfo(componentTypeID);
-	cmd.payload.componentDataBuffer = malloc(componentInfo->componentSize);
-	if (!cmd.payload.componentDataBuffer) {
-		printf("GECS_AttachComponent ERROR: malloc failed.\n");
-		return;
-	}
-
-	memcpy(cmd.payload.componentDataBuffer, componentData, componentInfo->componentSize);
-
-	DyArrayAddElement(&_commandQueue, &cmd);
-}
-
-void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID)
-{
-	GECSCommand cmd = {0};
-	cmd.type = GECS_CMD_DETACH_COMPONENT;
-	cmd.targetEntity = entity;
-	cmd.targetComponent = componentTypeID;
-
-	struct SparseSet* livingStateSet = DyArrayGetElement(&_entityComponentsLivingState, componentTypeID - 1);
-	bool* state = SparseSetGetElement(livingStateSet, entity.id);
-	*state = false; //dead
-
-	DyArrayAddElement(&_commandQueue, &cmd);
-}
-
-void GECS_LoadSnapshot(const GECSSnapshot* snapshot)
-{
-	GECSCommand cmd = {0};
-	cmd.type = GECS_CMD_LOAD_SNAPSHOT;
-	cmd.payload.snapshotToLoad = (GECSSnapshot*)snapshot;
-
-	DyArrayAddElement(&_commandQueue, &cmd);
-}
-
-bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath)
-{
-	GECSCommand cmd = {0};
-	cmd.type = GECS_CMD_MAKE_AND_LOAD_SNAPSHOT;
-	cmd.payload.filePath = _strdup(filePath);
-
-	DyArrayAddElement(&_commandQueue, &cmd);
-}
-
-void GECS_ClearECS()
-{
-	GECSCommand cmd = {0};
-	cmd.type = GECS_CMD_CLEAR_ECS;
-
-	DyArrayAddElement(&_commandQueue, &cmd);
 }
 
 SystemID GECS_RegisterSystem(void (*callback)(EntityID, void**), int componentCount, ...)
@@ -326,6 +269,8 @@ void GECS_ExecuteSystem(SystemID systemID)
 		return;
 	}
 
+	_isExecutingSystemCallback = true;
+
 	_SystemInfo* info = DyArrayGetElement(&_registeredSystems, systemID - 1);
 	struct SparseSet* componentSets[GECS_MAX_SYSTEM_COMPONENTS] = {0};
 	struct SparseSet* smallestSet;
@@ -342,6 +287,18 @@ void GECS_ExecuteSystem(SystemID systemID)
 		}
 	}
 
+	bool* entityActiveArr = (bool*)_entityActivationState.buf;
+	bool* entityAliveArr  = (bool*)_entityLivingState.buf;
+
+	//Pre-fetch those to avoid doing it in the hot spot
+	struct SparseSet* componentActiveSets[GECS_MAX_SYSTEM_COMPONENTS] = {0};
+	struct SparseSet* componentLivingSets[GECS_MAX_SYSTEM_COMPONENTS] = {0};
+
+	for (uint8_t i = 0; i < info->componentCount; i++) {
+	    componentActiveSets[i] = DyArrayGetElement(&_entityComponentsActivationState, info->components[i] - 1);
+	    componentLivingSets[i] = DyArrayGetElement(&_entityComponentsLivingState, info->components[i] - 1);
+	}
+
 	//Iterate for each element on that set.
 	size_t smallestSetLength = SparseSetGetElementCount(smallestSet);
 	void* components[GECS_MAX_SYSTEM_COMPONENTS] = {0};
@@ -351,36 +308,42 @@ void GECS_ExecuteSystem(SystemID systemID)
 
 		//Find matching components.
 		size_t smallestSetElementID = SparseSetGetIDFromPhysicalIndex(smallestSet, i); //This is the entity ID of this smallest set's component parent entity.
+		size_t entityIdx = smallestSetElementID - 1;
+
 		//Check if the whole entity is active or not
-		/* Check manually since the public function also requires a gen, and we don't need it, we know the entity exists. */
-		bool* isEntityActive = DyArrayGetElement(&_entityActivationState, smallestSetElementID - 1);
-		if(*isEntityActive == false) {continue;}
-		bool* isEntityAlive = DyArrayGetElement(&_entityLivingState, smallestSetElementID - 1);
-		if(*isEntityAlive == false) {continue;}
+		if (!entityActiveArr[entityIdx] || !entityAliveArr[entityIdx]) {
+        	continue;
+        }
 
 		for (uint8_t j = 0; j < info->componentCount; j++)
 		{
 			//Check if this entity has this component.
 			if (!SparseSetHasElement(componentSets[j], smallestSetElementID)) {archetypeFound = false; break;}
-			//Check if the component is active
-			struct SparseSet* componentActiveStateSet = DyArrayGetElement(&_entityComponentsActivationState, info->components[j] - 1);
-			bool* isComponentActive = SparseSetGetElement(componentActiveStateSet, smallestSetElementID);
-			if(*isComponentActive == false) {archetypeFound = false; break;}
 
-			struct SparseSet* componentLivingStateSet = DyArrayGetElement(&_entityComponentsLivingState, info->components[j] - 1);
-			bool* isComponentAlive = SparseSetGetElement(componentLivingStateSet, smallestSetElementID);
-			if(*isComponentAlive == false) {archetypeFound = false; break;}
+			struct SparseSet* activeSet = componentActiveSets[j];
+		    struct SparseSet* livingSet = componentLivingSets[j];
 
-			components[j] = SparseSetGetElement(componentSets[j], smallestSetElementID);
+		    size_t activePhysicalIdx = activeSet->logicalToPhysical[smallestSetElementID];
+		    size_t livingPhysicalIdx = livingSet->logicalToPhysical[smallestSetElementID];
+
+		    bool isCompActive = ((bool*)activeSet->data)[activePhysicalIdx];
+		    bool isCompAlive  = ((bool*)livingSet->data)[livingPhysicalIdx];
+
+		    if (!isCompActive || !isCompAlive) { archetypeFound = false; break; }
+
+		    size_t compPhysicalIdx = componentSets[j]->logicalToPhysical[smallestSetElementID];
+		    components[j] = (char*)componentSets[j]->data + (compPhysicalIdx * componentSets[j]->valueSize);
 		}
 
 		//The needed component set for this system has not been found in this entity.
 		if (!archetypeFound) continue;
 
-		size_t gen = *(size_t*)DyArrayGetElement(&_currentIDsGeneration, smallestSetElementID - 1);
+		size_t gen = *((size_t*)_currentIDsGeneration.buf + (smallestSetElementID - 1));
 		//Call the user-defined system's routine.
 		info->callback((EntityID){smallestSetElementID, gen}, components);
 	}
+
+	_isExecutingSystemCallback = false;
 }
 
 void GECS_DeactivateEntity(EntityID entity)
@@ -934,6 +897,208 @@ void GECS_CleanUp()
 	_initialized = false;
 }
 
+void _GECS_ClearECS_Instant()
+{
+	GECS_EXPECT(_initialized);
+
+	/*
+	 * Clear everything but not freeing the allocations, i'd have to re-create everything, for now i'll leave it like this
+     * i'll fix it in the future.
+	 */
+
+	DyArrayClear(&_currentIDsGeneration);
+	DyArrayClear(&_currentIDsFreeList);
+
+	SparseSetClear(&_entities);
+
+	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
+		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
+		SparseSetClear(&registeredComponent->set);
+	}
+
+	DyArrayClear(&_entityActivationState);
+
+	for (size_t i = 0; i < _entityComponentsActivationState.elementCount; i++) {
+		struct SparseSet* set = DyArrayGetElement(&_entityComponentsActivationState, i);
+		SparseSetClear(set);
+	}
+}
+
+void GECS_ProcessFrameEnd()
+{
+	GECS_EXPECT(_initialized);
+
+	bool sceneObliterated = false;
+	for (size_t i = 0; i < _commandQueue.elementCount; i++)
+	{
+		GECSCommand* cmd = DyArrayGetElement(&_commandQueue, i);
+		if (!cmd) continue;
+
+		if (sceneObliterated)
+		{
+			//Do not execute any other commands, simply iterate the last ones and free any buffer that remained allocated.
+			if (cmd->type == GECS_CMD_ATTACH_COMPONENT) {
+				free(cmd->payload.componentDataBuffer);
+			}
+
+			else if (cmd->type == GECS_CMD_MAKE_AND_LOAD_SNAPSHOT) {
+				free((void*)cmd->payload.filePath);
+			}
+
+			continue;
+		}
+
+		switch (cmd->type)
+		{
+			case GECS_CMD_DELETE_ENTITY:
+				_GECS_DeleteEntity_Instant(cmd->targetEntity);
+				break;
+			case GECS_CMD_ATTACH_COMPONENT:
+				_GECS_AttachComponent_Instant(cmd->targetEntity, cmd->targetComponent, cmd->payload.componentDataBuffer);
+				free(cmd->payload.componentDataBuffer);
+				break;
+			case GECS_CMD_DETACH_COMPONENT:
+				_GECS_DetachComponent_Instant(cmd->targetEntity, cmd->targetComponent);
+				break;
+
+			//These commands need to clear the command queue since they'll be completely obliterating any entity that
+			//had put the later commands in the queue, so basically invalidating they're effectiveness.
+			case GECS_CMD_CLEAR_ECS:
+				_GECS_ClearECS_Instant();
+				sceneObliterated = true;
+				break;
+			case GECS_CMD_LOAD_SNAPSHOT:
+				//Remember that the snapshot is a pointer passed by the user, and we did not make a copy of the whole snapshot.
+				//This means that if the user allocated that snapshot on a System's routine, this shit will crash.
+				//Document on how to use snapshots and tell to make global or external variables.
+				_GECS_LoadSnapshot_Instant(cmd->payload.snapshotToLoad);
+				sceneObliterated = true;
+				break;
+			case GECS_CMD_MAKE_AND_LOAD_SNAPSHOT:
+				_GECS_MakeAndLoadSnapshotFromDisk_Instant(cmd->payload.filePath);
+				free((void*)cmd->payload.filePath); //It was duped.
+				sceneObliterated = true;
+				break;
+			default:
+				break;
+		}
+	}
+
+	DyArrayClear(&_commandQueue);
+}
+
+/* ========== QUEUEABLE COMMANDS ========== */
+void GECS_DeleteEntity(EntityID entity)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!_isExecutingSystemCallback) {
+		_GECS_DeleteEntity_Instant(entity);
+		return;
+	}
+
+	GECSCommand cmd = {0};
+	cmd.type = GECS_CMD_DELETE_ENTITY;
+	cmd.targetEntity = entity;
+
+	bool* livingState = DyArrayGetElement(&_entityLivingState, entity.id - 1);
+	*livingState = false; //dead
+
+	DyArrayAddElement(&_commandQueue, &cmd);
+}
+
+void GECS_AttachComponent(EntityID entity, ComponentTypeID componentTypeID, void* componentData)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!_isExecutingSystemCallback) {
+		_GECS_AttachComponent_Instant(entity, componentTypeID, componentData);
+		return;
+	}
+
+	GECSCommand cmd = {0};
+	cmd.type = GECS_CMD_ATTACH_COMPONENT;
+	cmd.targetEntity = entity;
+	cmd.targetComponent = componentTypeID;
+	const ComponentTypeInfo* componentInfo = GECS_GetComponentTypeInfo(componentTypeID);
+	cmd.payload.componentDataBuffer = malloc(componentInfo->componentSize);
+	if (!cmd.payload.componentDataBuffer) {
+		printf("GECS_AttachComponent ERROR: malloc failed.\n");
+		return;
+	}
+
+	memcpy(cmd.payload.componentDataBuffer, componentData, componentInfo->componentSize);
+
+	DyArrayAddElement(&_commandQueue, &cmd);
+}
+
+void GECS_DetachComponent(EntityID entity, ComponentTypeID componentTypeID)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!_isExecutingSystemCallback) {
+		_GECS_DetachComponent_Instant(entity, componentTypeID);
+		return;
+	}
+
+	GECSCommand cmd = {0};
+	cmd.type = GECS_CMD_DETACH_COMPONENT;
+	cmd.targetEntity = entity;
+	cmd.targetComponent = componentTypeID;
+
+	struct SparseSet* livingStateSet = DyArrayGetElement(&_entityComponentsLivingState, componentTypeID - 1);
+	bool* state = SparseSetGetElement(livingStateSet, entity.id);
+	*state = false; //dead
+
+	DyArrayAddElement(&_commandQueue, &cmd);
+}
+
+void GECS_LoadSnapshot(const GECSSnapshot* snapshot)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!_isExecutingSystemCallback) {
+		_GECS_LoadSnapshot_Instant(snapshot);
+		return;
+	}
+
+	GECSCommand cmd = {0};
+	cmd.type = GECS_CMD_LOAD_SNAPSHOT;
+	cmd.payload.snapshotToLoad = (GECSSnapshot*)snapshot;
+
+	DyArrayAddElement(&_commandQueue, &cmd);
+}
+
+bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!_isExecutingSystemCallback) {
+		return _GECS_MakeAndLoadSnapshotFromDisk_Instant(filePath);
+	}
+
+	GECSCommand cmd = {0};
+	cmd.type = GECS_CMD_MAKE_AND_LOAD_SNAPSHOT;
+	cmd.payload.filePath = _strdup(filePath);
+
+	DyArrayAddElement(&_commandQueue, &cmd);
+}
+
+void GECS_ClearECS()
+{
+	GECS_EXPECT(_initialized);
+
+	if (!_isExecutingSystemCallback) {
+		_GECS_ClearECS_Instant();
+		return;
+	}
+
+	GECSCommand cmd = {0};
+	cmd.type = GECS_CMD_CLEAR_ECS;
+
+	DyArrayAddElement(&_commandQueue, &cmd);
+}
+
 /*
  * ===========================================================================
  * ================================ SNAPSHOTS ================================
@@ -1346,94 +1511,4 @@ bool GECS_IsSnapshotValid(const GECSSnapshot* snapshot) {
 		return true;
 
 	return false;
-}
-
-void _GECS_ClearECS_Instant()
-{
-	GECS_EXPECT(_initialized);
-
-	/*
-	 * Clear everything but not freeing the allocations, i'd have to re-create everything, for now i'll leave it like this
-     * i'll fix it in the future.
-	 */
-
-	DyArrayClear(&_currentIDsGeneration);
-	DyArrayClear(&_currentIDsFreeList);
-
-	SparseSetClear(&_entities);
-
-	for (size_t i = 0; i < _registeredComponents.elementCount; i++) {
-		_RegisteredComponent* registeredComponent = DyArrayGetElement(&_registeredComponents, i);
-		SparseSetClear(&registeredComponent->set);
-	}
-
-	DyArrayClear(&_entityActivationState);
-
-	for (size_t i = 0; i < _entityComponentsActivationState.elementCount; i++) {
-		struct SparseSet* set = DyArrayGetElement(&_entityComponentsActivationState, i);
-		SparseSetClear(set);
-	}
-}
-
-void GECS_ProcessFrameEnd()
-{
-	GECS_EXPECT(_initialized);
-
-	bool sceneObliterated = false;
-	for (size_t i = 0; i < _commandQueue.elementCount; i++)
-	{
-		GECSCommand* cmd = DyArrayGetElement(&_commandQueue, i);
-		if (!cmd) continue;
-
-		if (sceneObliterated)
-		{
-			//Do not execute any other commands, simply iterate the last ones and free any buffer that remained allocated.
-			if (cmd->type == GECS_CMD_ATTACH_COMPONENT) {
-				free(cmd->payload.componentDataBuffer);
-			}
-
-			else if (cmd->type == GECS_CMD_MAKE_AND_LOAD_SNAPSHOT) {
-				free((void*)cmd->payload.filePath);
-			}
-
-			continue;
-		}
-
-		switch (cmd->type)
-		{
-			case GECS_CMD_DELETE_ENTITY:
-				_GECS_DeleteEntity_Instant(cmd->targetEntity);
-				break;
-			case GECS_CMD_ATTACH_COMPONENT:
-				_GECS_AttachComponent_Instant(cmd->targetEntity, cmd->targetComponent, cmd->payload.componentDataBuffer);
-				free(cmd->payload.componentDataBuffer);
-				break;
-			case GECS_CMD_DETACH_COMPONENT:
-				_GECS_DetachComponent_Instant(cmd->targetEntity, cmd->targetComponent);
-				break;
-
-			//These commands need to clear the command queue since they'll be completely obliterating any entity that
-			//had put the later commands in the queue, so basically invalidating they're effectiveness.
-			case GECS_CMD_CLEAR_ECS:
-				_GECS_ClearECS_Instant();
-				sceneObliterated = true;
-				break;
-			case GECS_CMD_LOAD_SNAPSHOT:
-				//Remember that the snapshot is a pointer passed by the user, and we did not make a copy of the whole snapshot.
-				//This means that if the user allocated that snapshot on a System's routine, this shit will crash.
-				//Document on how to use snapshots and tell to make global or external variables.
-				_GECS_LoadSnapshot_Instant(cmd->payload.snapshotToLoad);
-				sceneObliterated = true;
-				break;
-			case GECS_CMD_MAKE_AND_LOAD_SNAPSHOT:
-				_GECS_MakeAndLoadSnapshotFromDisk_Instant(cmd->payload.filePath);
-				free((void*)cmd->payload.filePath); //It was duped.
-				sceneObliterated = true;
-				break;
-			default:
-				break;
-		}
-	}
-
-	DyArrayClear(&_commandQueue);
 }
