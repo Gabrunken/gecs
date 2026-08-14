@@ -326,9 +326,8 @@ void GECS_ExecuteSystem(SystemID systemID)
 		    size_t activePhysicalIdx = activeSet->logicalToPhysical[smallestSetElementID];
 			size_t livingPhysicalIdx = livingSet->logicalToPhysical[smallestSetElementID];
 
-			//Salto diretto al byte esatto usando il valueSize reale dello SparseSet
-			bool isCompActive = *(bool*)((char*)activeSet->data + (activePhysicalIdx * activeSet->valueSize));
-			bool isCompAlive  = *(bool*)((char*)livingSet->data + (livingPhysicalIdx * livingSet->valueSize));
+			bool isCompActive = *((bool*)activeSet->data + activePhysicalIdx);
+			bool isCompAlive  = *((bool*)livingSet->data + livingPhysicalIdx);
 
 		    if (!isCompActive || !isCompAlive) { archetypeFound = false; break; }
 
@@ -564,11 +563,11 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 	DyArrayAddElement(&_registeredComponents, &componentInfo);
 
 	struct SparseSet componentActivationStateSet;
-	SparseSetCreate(&componentActivationStateSet, sizeof(bool), 100);
+	SparseSetCreate(&componentActivationStateSet, 100, sizeof(bool));
 	DyArrayAddElement(&_entityComponentsActivationState, &componentActivationStateSet);
 
 	struct SparseSet componentLivingStateSet;
-	SparseSetCreate(&componentLivingStateSet, sizeof(bool), 100);
+	SparseSetCreate(&componentLivingStateSet, 100, sizeof(bool));
 	DyArrayAddElement(&_entityComponentsLivingState, &componentLivingStateSet);
 
 	//The first ComponentTypeID starts from 1.
@@ -626,11 +625,11 @@ ComponentTypeID GECS_vRegisterComponent(size_t size, const char* name, uint32_t 
 	DyArrayAddElement(&_registeredComponents, &componentInfo);
 
 	struct SparseSet componentActivationStateSet;
-	SparseSetCreate(&componentActivationStateSet, sizeof(bool), 100);
+	SparseSetCreate(&componentActivationStateSet, 100, sizeof(bool));
 	DyArrayAddElement(&_entityComponentsActivationState, &componentActivationStateSet);
 
 	struct SparseSet componentLivingStateSet;
-	SparseSetCreate(&componentLivingStateSet, sizeof(bool), 100);
+	SparseSetCreate(&componentLivingStateSet, 100, sizeof(bool));
 	DyArrayAddElement(&_entityComponentsLivingState, &componentLivingStateSet);
 
 	//The first ComponentTypeID starts from 1.
