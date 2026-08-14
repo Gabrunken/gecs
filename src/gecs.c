@@ -742,7 +742,7 @@ void _GECS_DeleteEntity_Instant(EntityID entity)
 
 	//First remove any components it had, by checking its metadata
 	EntityInfo* entityInfo = SparseSetGetElement(&_entities, entity.id);
-	for (uint8_t i = entityInfo->componentCount; i >= 0; i--) //Iterate backwards since componentCount will decrease at each DetachComponent call.
+	for (uint8_t i = entityInfo->componentCount - 1; i >= 0; i--) //Iterate backwards since componentCount will decrease at each DetachComponent call.
 	{
 		ComponentTypeID target = entityInfo->componentsPresence[i];
 
