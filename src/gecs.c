@@ -742,11 +742,10 @@ void _GECS_DeleteEntity_Instant(EntityID entity)
 
 	//First remove any components it had, by checking its metadata
 	EntityInfo* entityInfo = SparseSetGetElement(&_entities, entity.id);
-	for (uint8_t i = entityInfo->componentCount - 1; i >= 0; i--) //Iterate backwards since componentCount will decrease at each DetachComponent call.
+	while (entityInfo->componentCount > 0) //Iterate backwards since DetachComponent does a Swap and Pop, so we always remove the last element.
 	{
-		ComponentTypeID target = entityInfo->componentsPresence[i];
-
-		_GECS_DetachComponent_Instant(entity, target); //Call the standard function since it does a proper cleanup instead of doing it manually.
+     	ComponentTypeID target = entityInfo->componentsPresence[entityInfo->componentCount - 1];
+	    _GECS_DetachComponent_Instant(entity, target);
 	}
 
 	//Add the removed id to the free list
@@ -842,8 +841,14 @@ void _GECS_DetachComponent_Instant(EntityID entity, ComponentTypeID componentTyp
 	//Swap and pop
 	//I could check if the index is 255 (no component), but i do this check above
 	uint8_t targetIdx = entityInfo->componentIDToPresenceIdx[componentTypeID - 1];
-	entityInfo->componentsPresence[targetIdx] = entityInfo->componentsPresence[entityInfo->componentCount - 1];
-	entityInfo->componentIDToPresenceIdx[componentTypeID - 1] = 255; /* Invalid index, since in the system there can only be no more than 255 components */
+
+	ComponentTypeID swappedComponent = entityInfo->componentsPresence[entityInfo->componentCount - 1];
+
+	entityInfo->componentsPresence[targetIdx] = swappedComponent;
+
+	entityInfo->componentIDToPresenceIdx[swappedComponent - 1] = targetIdx;
+
+	entityInfo->componentIDToPresenceIdx[componentTypeID - 1] = 255;
 	entityInfo->componentCount--;
 
 	struct SparseSet* componentActiveStateSet = DyArrayGetElement(&_entityComponentsActivationState, componentTypeID - 1);
