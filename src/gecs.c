@@ -324,10 +324,11 @@ void GECS_ExecuteSystem(SystemID systemID)
 		    struct SparseSet* livingSet = componentLivingSets[j];
 
 		    size_t activePhysicalIdx = activeSet->logicalToPhysical[smallestSetElementID];
-		    size_t livingPhysicalIdx = livingSet->logicalToPhysical[smallestSetElementID];
+			size_t livingPhysicalIdx = livingSet->logicalToPhysical[smallestSetElementID];
 
-		    bool isCompActive = ((bool*)activeSet->data)[activePhysicalIdx];
-		    bool isCompAlive  = ((bool*)livingSet->data)[livingPhysicalIdx];
+			//Salto diretto al byte esatto usando il valueSize reale dello SparseSet
+			bool isCompActive = *(bool*)((char*)activeSet->data + (activePhysicalIdx * activeSet->valueSize));
+			bool isCompAlive  = *(bool*)((char*)livingSet->data + (livingPhysicalIdx * livingSet->valueSize));
 
 		    if (!isCompActive || !isCompAlive) { archetypeFound = false; break; }
 
