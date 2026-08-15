@@ -38,6 +38,9 @@ void LifeSystem(EntityID entity, void** components)
         // Boom. Accodiamo la distruzione.
         // L'entità viene disattivata logicamente all'istante (niente zombie).
         GECS_DeleteEntity(entity);
+
+        EntityID id = GECS_CreateEntity("New Entity");
+        GECS_DeleteEntity(id);
     }
 }
 

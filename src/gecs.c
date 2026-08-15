@@ -80,6 +80,7 @@ static dyarray _entityLivingState;
 static dyarray _entityComponentsLivingState;
 
 static dyarray _commandQueue;
+static size_t queuedEntityCount;
 
 /*
  * Are we inside a user's system's callback?
@@ -108,9 +109,11 @@ void _GECS_AttachComponent_Instant(EntityID entity, ComponentTypeID componentTyp
 void _GECS_ClearECS_Instant();
 void _GECS_LoadSnapshot_Instant(const GECSSnapshot* snapshot);
 bool _GECS_MakeAndLoadSnapshotFromDisk_Instant(const char* filePath);
+EntityID _GECS_CreateEntity_Instant(const char *name, bool generateID, EntityID optional_preGeneratedID);
 
 typedef enum
 {
+	GECS_CMD_CREATE_ENTITY,
     GECS_CMD_DELETE_ENTITY,
     GECS_CMD_ATTACH_COMPONENT, //Needed in case of SparseSet reallocation and pointer invalidation.
     GECS_CMD_DETACH_COMPONENT,
@@ -132,6 +135,7 @@ typedef struct
         	GECSSnapshot* snapshotToLoad; // Usato per LOAD
          	const char* filePath; //Usato per MAKE and LOAD
         };
+        const char* entityName; //Usato per CREATE ENTITY
     } payload;
 
 } GECSCommand; //A Big Ass struct to hold a possible command in the cmd buffer.
@@ -656,7 +660,7 @@ static EntityID _GECS_GetNewID()
 
 	EntityID id = {0};
 
-	size_t entityCount = SparseSetGetElementCount(&_entities);
+	size_t entityCount = SparseSetGetElementCount(&_entities) + queuedEntityCount;
 
 	//Check if theres something in the free list
 	if (_currentIDsFreeList.elementCount > 0)
@@ -691,7 +695,7 @@ static EntityID _GECS_GetNewID()
 	return id;
 }
 
-EntityID GECS_CreateEntity(const char *name)
+EntityID _GECS_CreateEntity_Instant(const char *name, bool generateID, EntityID optional_preGeneratedID)
 {
 	GECS_EXPECT(_initialized);
 
@@ -714,7 +718,17 @@ EntityID GECS_CreateEntity(const char *name)
 		return (EntityID){GECS_INVALID_ID, GECS_INVALID_GEN};
 	}
 
-	EntityID id = _GECS_GetNewID(); //Automatically increases entityCount on success.
+	EntityID id;
+	if (generateID)
+	{
+		id = _GECS_GetNewID(); //Automatically increases entityCount on success.
+	}
+
+	else
+	{
+		id = optional_preGeneratedID;
+	}
+
 	if (!id.id)
 	{
 		printf("GECS_CreateEntity ERROR: failed to create new entity of name %s.\n", name);
@@ -895,6 +909,7 @@ void GECS_CleanUp()
 	DyArrayFree(&_entityComponentsLivingState);
 
 	DyArrayFree(&_commandQueue);
+	queuedEntityCount = 0;
 
 	_initialized = false;
 }
@@ -947,11 +962,19 @@ void GECS_ProcessFrameEnd()
 				free((void*)cmd->payload.filePath);
 			}
 
+			else if (cmd->type == GECS_CMD_CREATE_ENTITY) {
+				free((void*)cmd->payload.entityName);
+			}
+
 			continue;
 		}
 
 		switch (cmd->type)
 		{
+			case GECS_CMD_CREATE_ENTITY:
+				_GECS_CreateEntity_Instant(cmd->payload.entityName, false, cmd->targetEntity);
+				free((void*)cmd->payload.entityName);
+				break;
 			case GECS_CMD_DELETE_ENTITY:
 				_GECS_DeleteEntity_Instant(cmd->targetEntity);
 				break;
@@ -986,10 +1009,37 @@ void GECS_ProcessFrameEnd()
 		}
 	}
 
+	queuedEntityCount = 0;
 	DyArrayClear(&_commandQueue);
 }
 
 /* ========== QUEUEABLE COMMANDS ========== */
+EntityID GECS_CreateEntity(const char *name)
+{
+	GECS_EXPECT(_initialized);
+
+	if (!_isExecutingSystemCallback) {
+		return _GECS_CreateEntity_Instant(name, true, (EntityID){0});
+	}
+
+	if (!name) {
+		printf("GECS_CreateEntity ERROR: name is NULL.\n");
+		return (EntityID){0,0};
+	}
+
+	EntityID id = _GECS_GetNewID();
+	queuedEntityCount++;
+
+	GECSCommand cmd = {0};
+	cmd.type = GECS_CMD_CREATE_ENTITY;
+	cmd.targetEntity = id;
+	cmd.payload.entityName = _strdup(name);
+
+	DyArrayAddElement(&_commandQueue, &cmd);
+
+	return id;
+}
+
 void GECS_DeleteEntity(EntityID entity)
 {
 	GECS_EXPECT(_initialized);
@@ -1064,6 +1114,11 @@ void GECS_LoadSnapshot(const GECSSnapshot* snapshot)
 		return;
 	}
 
+	if (!snapshot) {
+		printf("GECS_LoadSnapshot ERROR: snapshot is NULL.\n");
+		return;
+	}
+
 	GECSCommand cmd = {0};
 	cmd.type = GECS_CMD_LOAD_SNAPSHOT;
 	cmd.payload.snapshotToLoad = (GECSSnapshot*)snapshot;
@@ -1077,6 +1132,11 @@ bool GECS_MakeAndLoadSnapshotFromDisk(const char* filePath)
 
 	if (!_isExecutingSystemCallback) {
 		return _GECS_MakeAndLoadSnapshotFromDisk_Instant(filePath);
+	}
+
+	if (!filePath) {
+		printf("GECS_MakeAndLoadSnapshotFromDisk ERROR: filePath is NULL.\n");
+		return false;
 	}
 
 	GECSCommand cmd = {0};
