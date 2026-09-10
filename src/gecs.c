@@ -1,3 +1,4 @@
+#include "hashmap.h"
 #include <stdio.h>
 #include <string.h>
 #define DYARRAY_IMPL
@@ -5,8 +6,6 @@
 #include <stdlib.h>
 #define SPARSE_SET_IMPL
 #include <sparse_set.h>
-#define HASHMAP_IMPL
-#include <hashmap.h>
 #include <stdarg.h>
 
 #include <gecs.h> //Put it last to avoid reincluding single-headers.
@@ -556,6 +555,7 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 		componentInfo.info.componentFieldsInfo[i].type = fieldType;
 
 		strncpy(componentInfo.info.componentFieldsInfo[i].name, fieldName, GECS_MAX_COMPONENT_FIELD_NAME_LENGTH);
+		hashmap_set_val(componentInfo.info.fieldNameToInfoIdx, componentInfo.info.componentFieldsInfo[i].name, i);
 	}
 
 	va_end(args);
@@ -620,6 +620,7 @@ ComponentTypeID GECS_vRegisterComponent(size_t size, const char* name, uint32_t 
 		componentInfo.info.componentFieldsInfo[i].type = fieldType;
 
 		strncpy(componentInfo.info.componentFieldsInfo[i].name, fieldName, GECS_MAX_COMPONENT_FIELD_NAME_LENGTH);
+		hashmap_set_val(componentInfo.info.fieldNameToInfoIdx, componentInfo.info.componentFieldsInfo[i].name, i);
 	}
 
 	struct SparseSet set = {0};
@@ -880,6 +881,7 @@ void GECS_CleanUp()
 	{
 		_RegisteredComponent* componentInfo = DyArrayGetElement(&_registeredComponents, i);
 		SparseSetFree(&componentInfo->set);
+		hashmap_delete(componentInfo->info.fieldNameToInfoIdx);
 	}
 
 	DyArrayFree(&_registeredComponents);

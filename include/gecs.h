@@ -14,6 +14,8 @@ is composed of.
 #include <stdint.h>
 #include <dyarray.h>
 #include <sparse_set.h>
+#define HASHMAP_IMPL
+#include <hashmap.h>
 
 #define GECS_INVALID_ID 0
 #define GECS_INVALID_GEN 0
@@ -45,6 +47,7 @@ typedef struct
 typedef struct
 {
 	ComponentFieldInfo componentFieldsInfo[GECS_MAX_COMPONENT_FIELDS];
+	hashmap fieldNameToInfoIdx; //Key is field name, value is an idx that maps to the info's array.
 	char name[GECS_MAX_COMPONENT_NAME_LENGTH + 1];
 	uint32_t fieldCount;
 	uint32_t componentSize; //In bytes
