@@ -546,6 +546,7 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 	{
 		uint32_t fieldType = va_arg(args, uint32_t);
 		const char* fieldName = va_arg(args, char*);
+		uint32_t fieldOffset = va_arg(args, uint32_t);
 		if (!fieldName){
 			printf("GECS_RegisterComponent ERROR: a variadic argument is NULL.\n");
 			va_end(args);
@@ -553,6 +554,7 @@ ComponentTypeID GECS_RegisterComponent(size_t size, const char* name, uint32_t f
 		}
 
 		componentInfo.info.componentFieldsInfo[i].type = fieldType;
+		componentInfo.info.componentFieldsInfo[i].offset = fieldOffset;
 
 		strncpy(componentInfo.info.componentFieldsInfo[i].name, fieldName, GECS_MAX_COMPONENT_FIELD_NAME_LENGTH);
 		hashmap_set_val(componentInfo.info.fieldNameToInfoIdx, componentInfo.info.componentFieldsInfo[i].name, i);
@@ -612,12 +614,14 @@ ComponentTypeID GECS_vRegisterComponent(size_t size, const char* name, uint32_t 
 	{
 		uint32_t fieldType = va_arg(args, uint32_t);
 		const char* fieldName = va_arg(args, char*);
+		uint32_t fieldOffset = va_arg(args, uint32_t);
 		if (!fieldName){
 			printf("GECS_vRegisterComponent ERROR: a variadic argument is NULL.\n");
 			return GECS_INVALID_COMPONENT_TYPE_ID;
 		}
 
 		componentInfo.info.componentFieldsInfo[i].type = fieldType;
+		componentInfo.info.componentFieldsInfo[i].offset = fieldOffset;
 
 		strncpy(componentInfo.info.componentFieldsInfo[i].name, fieldName, GECS_MAX_COMPONENT_FIELD_NAME_LENGTH);
 		hashmap_set_val(componentInfo.info.fieldNameToInfoIdx, componentInfo.info.componentFieldsInfo[i].name, i);

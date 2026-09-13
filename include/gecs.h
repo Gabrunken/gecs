@@ -42,6 +42,7 @@ typedef struct
 {
 	char name[GECS_MAX_COMPONENT_FIELD_NAME_LENGTH + 1];
 	uint32_t type;
+	uint32_t offset; //Byte offset from the start of the component.
 } ComponentFieldInfo;
 
 typedef struct
@@ -108,10 +109,13 @@ void GECS_ExecuteSystem(SystemID systemID);
  * @param size The size in bytes of the singular component.
  * @param name The name of this component type.
  * @param fieldCount The number of elements (fields) this component consists of.
+ * NOTE: the variadic parameter can be ignored, setting fieldCount to 0.
  * The variadic field is used to describe the elements this component has, coupled with the
  * previous argument "fieldCount", to provide introspection information for the system.
- * This field is made of "fieldType" and "fieldName" pairs, so for each field in the component,
- * insert the type and name in this order. The fields must be EXACTLY ordered and layed out as
+ * This field is made of "fieldType" and "fieldName" and "fieldOffset" triplets, so for each field in the component,
+ * insert the type and name in this order. fieldOffset can be retrieved with offsetof() from stddef.h, which takes
+ * padding into account.
+ * The fields must be EXACTLY ordered and layed out as
  * you would use them in memory, with the fieldType also indicating the byte size of that field.
  * NOTE: the field types must be defined by the user, since it might have its own custom types,
  * and not basic ones such as simple primitives (int, bool, float). For that, do your own enum.
