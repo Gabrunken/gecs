@@ -1,3 +1,4 @@
+#define HASHMAP_IMPL
 #include "hashmap.h"
 #include <stdio.h>
 #include <string.h>
