@@ -14,7 +14,6 @@ is composed of.
 #include <stdint.h>
 #include <dyarray.h>
 #include <sparse_set.h>
-#define HASHMAP_IMPL
 #include <hashmap.h>
 
 #define GECS_INVALID_ID 0
